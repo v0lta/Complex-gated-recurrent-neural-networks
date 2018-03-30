@@ -1,0 +1,435 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usepackage[utf8]{inputenc}
+\usepackage{fontspec} % This line only for XeLaTeX and LuaLaTeX
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.13}
+\usepackage[hidelinks]{hyperref}
+
+\title{Eigenspace optimization for Convnets}
+\author{Moritz Wolter  \\
+    Uni Bonn  \\
+    \and 
+    Angela Yao \\
+    Uni Bonn \\
+    }
+
+\date{\today}
+% Hint: \title{what ever}, \author{who care} and \date{when ever} could stand 
+% before or after the \begin{document} command 
+% BUT the \maketitle command MUST come AFTER the \begin{document} command! 
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Conv-nets suffer from Vanishing gradients. When expressing convolutions as 
+doubly block circulant matrices the network can be written as a chain of
+matrix products (assuming linear convolutions for simplicity).
+The long term evolution of matrix multiplication chains is determined by
+their eigenvalues. We hope to improve performance by optimizing the 
+convolutions inside a constrained eigenspace:
+\begin{align}
+\min_{\mathbf{W}} \text{cost}(\{\mathbf{x}\}, \{\mathbf{W}\}) \\
+\text{such that } \forall m \; \| \{\phi_m\} \| = 1 
+\end{align}
+Where $\{\mathbf{W}\}$ denotes the set of network weights $\{\mathbf{x}\}$ the set of network inputs
+and $\{\phi_m\}$ the set of all weight matrix eigenvalues.
+It turns out that we do not need to work with a constrained optimization algorithm here, but 
+can instead rewrite the problem in an unconstrained way, and use libraries optimized for large
+scale unconstrained optimization such as tensorflow or pytorch.
+\end{abstract}
+
+\section{Convolutions and circulant matrices}
+One dimensional convolutions can be expressed as multiplication with a circulant matrix.
+The convolution operations used in neural networks may be expressed as matrix multiplication
+with doubly circulant matrices \cite[page 324]{goodfellow}, doubly referring to a circulant block matrix consisting of circulant blocks. 
+The eigen-decompositions of both cases seem to be well understood in the specialized mathematical literature\footnote{\url{http://nzjm.math.auckland.ac.nz/images/8/8e/18-36.pdf}}.
+
+\subsection{1D-convolutions and circulant matrices}
+\begin{figure}
+\centering
+\begin{minipage}{.45\textwidth}
+\begin{equation*}
+C = \begin{pmatrix}
+c_1 & c_2 & c_3 & c_4 \\
+c_4 & c_1 & c_2 & c_3 \\
+c_3 & c_4 & c_1 & c_2 \\
+c_2 & c_3 & c_4 & c_1 \\
+\end{pmatrix}
+\end{equation*}
+\end{minipage}
+\begin{minipage}{.45\textwidth}
+\scalebox{0.4}{\input{img/circ.tex}}
+\end{minipage}
+\caption{Circulant matrix structure as formula and in plotted form.}
+\label{fig:circ1}
+\end{figure}
+Consider for example the four by four circulant matrix $C = circ(c_1,c_2,c_3,c_4)$
+as shown in figure~\ref{fig:circ1}.
+The matrix vector product $C\mathbf{x}$ with $\mathbf{x} = (x_1, x_2, x_3, x_4)^T$, can be written as:
+\begin{align}
+c_1x_1 + c_2x_2 + c_3x_3 + c_4x_4 \\
+c_4x_1 + c_1x_2 + c_2x_3 + c_3x_4 \\
+c_3x_1 + c_4x_2 + c_1x_3 + c_2x_4 \\
+c_2x_1 + c_3x_2 + c_4x_3 + c_1x_4
+\end{align}
+Above one can nicely see how the kernel moves over the one dimensional signal in x. If the wrapping effect is not desired the edges of $x$ must be padded with zeros and parts of the circulant matrix be set to zero. For example $x_1, x_4 =0$ and $c_3,c_4=0$, will remove the wrap-around.
+
+\section{The linear one-dimensional case}
+According to \cite[page 33]{gray}, the eigenbasis of all circulant matrices is given by:
+\begin{align}
+\mathbf{f}^{(m)} = \dfrac{1}{\sqrt{n}}(1, \exp(-2\pi im/n), \dots, \exp(-2\pi im(n-1)/n))'
+\end{align}
+For all m eigenvectors. Given a set of complex eigenvalues $\{\phi_m\}$, the corresponding
+circulant matrix can be computed using:
+\begin{align}
+C = F \Phi F^{-1}
+\end{align}
+For reasons which will become clear later we will express our eigenvalues in polar coordinates
+as:
+\begin{align}
+\phi_m = r \exp{i\omega}
+\end{align}
+We propose the normalize network convolutions by setting their $r=1$ for all convolutions and all eigenvalues and optimize only the eigenangles $\omega$. Which amounts to requiring all
+convolution matrices to have eigenvalues located on the unit circle or equivalently, we enforce 
+$\| \phi_m \| = 1$. To construct $C$ we must transform all $\phi_m$s to Cartesian coordinates 
+using $x_m= \cos(\omega)$ and $y_m=\sin(\omega)$. When then place the Cartesian eigenvalues $x_m + iy_m$ on the diagonal of $\Phi$. Next we can construct $C$ from $C = U \Phi U^{-1}$. Where $U$ is known and can be attached as a constant matrix to the computational graph. Furthermore the previous operations involve only trigonometric functions and matrix products, these operations are all differentiable, therefore we can find their gradient using standard AD tools.
+By running the optimization in the $\omega$ space we can enforce $\| \phi_m \| = 1$, without having
+to work with a constrained optimization algorithm.
+
+\subsection{Effects on linear network stability}
+\subsection{Matrix power}
+\label{seq:linstab}
+In this section we will evaluate the effect of $\| \phi_m \| = 1$ on a linear one dimensional bias-free convnet consisting of n layers.
+\begin{align}
+y &= C_1 \cdot C_2 \dots C_n \cdot x \\
+y &= F \Phi_1 F^{-1} \cdot F\Phi_2 F^{-1} \dots \cdot F\Phi_n F^{-1} \cdot x \\
+y &= F \Phi_1 \cdot \Phi_2 \dots \cdot \Phi_n F^{-1}\cdot x \\ 
+\end{align}
+All convolution eigenvalues will be of the form $\phi_{m,n} = \exp{i\omega_{m,n}}$, $\Phi$ amounts to element wise multiplication considering the rows therefore will lead to eigenvalues of:
+\begin{align}
+\phi_m = \exp(i\omega_{m,1} + i\omega_{m,2} \dots i\omega_{m,n} )
+\end{align}
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \draw[thick] (0cm, 0cm) circle(1cm);
+        \draw[->] (0,-1.25cm) -- (0,1.25cm) node[above] {$y$};
+        \draw[->] (-1.25,0) -- (1.25cm,0) node[right] {$x$};
+        \filldraw[black] (1cm, 0) circle(1.4pt);
+        \draw (1.35cm,0cm) node[above=1pt] {$(1,0)$};
+    \end{tikzpicture}
+    \caption{Illustration of the unit circle, on which we place all convolution
+    eigenvalues $\phi = x + iy$.}
+\end{figure}
+For the equivalent one convolution network. We therefore claim that adding convolutions to this kind of eigenspace normalized linear network will add additional degrees of freedom to eigenspace rotations around the unit circle. Having set all $r_{m,n} = 1$ we claim to run a more stable network, because we only rotate, but do not rescale with additional layers.
+This convolution should remain stable when added to the  recurrent convLSTM state update equation. \\
+However to apply this idea to convNets in space the non-linearity needs to be taken care of.
+
+\subsection{Network conditioning}
+In linear algebra when solving $A\mathbf{x} = b$ or $\min_x \| Ax - b\|$ an important property
+is the condition number. It is a measure of the solutions sensitivity to small perturbations in $\mathbf{x}$. A problem is considered to be ill conditioned when $A$'s assiciated condition number is very large. 
+A problem's conditioning is measured using:
+\begin{align}
+\kappa = \text{max}_{i,j}| \dfrac{\phi_i}{\phi_j}|
+\end{align}
+In other words the matrix condition $\kappa$ is the norm of the ratio of the largest and smallest eigenvalue. By enforcing $\| \phi \| = 1$ we also ensure a constant condition number of one for our convolution matrices. We hope to increase overall network stability this way, because our convolutions should not react very sensitively to small input perturbations.
+
+\subsection{Backward mode automatic differentiation gradients}
+Consider the non-linear network proposed in \cite{Pascanu}:
+\begin{align}
+\mathbf{x}_t  = W_{\text{rec}}f(\mathbf{x}_{t-1}) + W_{\text{in}}\mathbf{u}_t + \textbf{b}
+\end{align}
+Following \cite{Pascanu} we define the error function $\mathcal{E}_t = \mathcal{L}$ and work with BPTT gradients given by:
+\begin{align}
+\frac{\partial \mathcal{E}}{\partial \theta} &= \sum_{1 \leq t \leq T} \frac{\mathcal{E}_t}{\partial \theta} \\
+\frac{\partial\mathcal{E}_t}{\partial\theta} &= \sum_{1 \leq k \leq t}( \frac{\mathcal{E}_t}{\partial \mathbf{x}_t} \frac{\partial \mathbf{x}_t}{ \mathbf{x}_k} \frac{\partial^+ \mathbf{x}_k}{\partial \theta}) \label{eq:gradsum}\\
+\frac{\partial \mathbf{x}_t}{ \partial \mathbf{x}_k} &= \prod_{t \geq i > k} \frac{\partial \mathbf{x}_i}{ \partial \mathbf{x}_{i-1}} = \prod_{t \geq i > k} W^T_{\text{rec}} \text{diag}(f'(\mathbf{x}_{i-1}))
+\end{align}
+The above equations are essential a consistent application of the chain rule. It is important to note that $\partial^+ \mathbf{x}_{k} / \partial W_\text{rec} = f(\mathbf{x}_{k-1})$.
+
+\subsubsection{The linear case}
+Working with $f(x) = x$ according the long term behavior is determined by the matrix product $\partial \mathbf{x}_t / \partial \mathbf{x}_k$ \cite{Pascanu}. We define $W_{\text{rec}} = C$, and normalize the spectrum of C to $\forall k \; \| \phi_k \| = 1$ for $k \in \{1 \dots n\}$. Focusing on the term in the sum of equation~\ref{eq:gradsum}, we express $\partial \mathcal{E} / \partial \mathbf{x}_t $ in terms of a Fourier basis:
+\begin{align}
+\frac{\partial \mathcal{E}}{\partial \mathbf{x}_t} = \sum_{i=1}^n \mathbf{f}_i^T d_i  
+\end{align}
+Knowing the Fourier vectors are eigenvectors of $C$, which leads to $\mathbf{f}_i^T(C^T)^l = \phi_i^l\mathbf{f}_i^T$ therefore we have:
+\begin{align}
+\frac{\partial \mathcal{E}}{\partial \mathbf{x}_t}\frac{\partial \mathbf{x}_t}{\partial \mathbf{x}_k} = 
+\sum_{i=1}^n \mathbf{f}_i^T d_i \phi_i 
+\end{align}
+Having chosen $\| \phi_k \| = 1$, we can approximate:
+\begin{align}
+\frac{\partial \mathcal{E}}{\partial \mathbf{x}_t}\frac{\partial \mathbf{x}_t}{\partial \mathbf{x}_k} = 
+\sum_{i=1}^n \mathbf{f}_i^T d_i \phi_i 
+\approx \sum_{i=1}^n \mathbf{f}_i^T d_i =\frac{\partial \mathcal{E}}{\partial \mathbf{x}_t}
+\end{align}
+Because $\phi = \exp(i\omega)$ merely represents a rotation of the errors phase angle, but leaves its magnitude intact.
+Using the train of tought borrowed from \cite{Pascanu}, we claim to establish an error carousel similar to Hochreiter 1998, through which errors can pass in a stable manner.
+
+\subsubsection{Non-linear Cayley-Networks}
+From \cite{Arjovsky} we learn that for stability we must have:
+\begin{equation}
+\|\text{diag}(f'(\mathbf{x}_{i-1})\| = \|D\| = 1.
+\end{equation}
+Unfortunately for the modRelu $\sigma_{\text{Relu}}(\|z\| + b) \frac{z}{\|z\|}$ proposed in \cite{Arjovsky} we find:
+\begin{equation}
+\frac{\partial}{\partial z}\sigma_{\text{Relu}}(\|z\| + b) \frac{z}{\|z\|} = \sigma_{\text{Relu}}'(\|z\| + b) \frac{z}{\|z\|} + \sigma_{\text{Relu}}(\|z\| + b) (\frac{z}{\|z\|})'
+\end{equation}
+By applying the product rule. The left part of the resulting sum is stable, but the right part is not bounded and therefore unstable.
+Other relu based non-linearities are often defined by appling relus on complex and imaginary part:
+\begin{align}
+\text{cRelu}(z) = \text{Relu}(x) + i\cdot \text{Relu}(y).
+\end{align}
+In its holomorph region the derivative of the function is one just like in the real case which is stable.
+This definition is known to be holomorph when $\text{sign}(\Re(z)) = \text{sign}(\Im(z))$, which is the case in the first an third quadrant. When restricting this definition to the first quadrant and setting it to zero elsewhere, one obtains the $\text{zRelu}$ which is a holomorph function. \\
+Alternatively we could employ a non-linearity based on the Cayley-Transform \cite[p. 100]{Bornemann}:
+\begin{equation}
+C'(z) = \frac{z-i}{z+i}
+\end{equation}
+Which is guaranteed to map the upper half of the complex plane into the unit circle. Integrating $C(z)$
+leads to;
+\begin{equation}
+C(z) = z - 2i\ln(z + i)
+\end{equation}
+Which leads to a possible non-linearity for $\Re(z) > 0$. The unstable lower part of the complex plane where $\Re(z) < 0$, could be removed by defining:
+\begin{equation}
+D'(z) = \frac{z+i}{z-i}
+\end{equation}
+And working with $D(z) = z + 2i\ln(z - i)$ where  $\Re(z) < 0$. Working with this definition all $z$ with $\Im(z) = 0$, would not be defined, because there is no smooth connection when crossing from $\Re(z) > 0$ to $\Re(z) < 0$ and the complex logarithm is not defined for all $\Re(z) < 0$ with $\Im(z) = 0$.
+Cayley transforms are known to be holomorph, which is a general property of all Möbius transforms.
+
+\subsubsection{Non-linear Phase-Relus}
+Holomorph functions $f(x,y) = u(x,y) + iv(x,y)$ must satisfy the Cauchy-Riemann equations:
+\begin{align}
+\frac{\partial u}{\partial x} = \frac{\partial u}{\partial y} \; \text{and} \; \frac{\partial u}{\partial y} = -\frac{\partial v}{\partial x}  
+\end{align}
+This form has been considered in \cite{Trabelsi} and used to evalute existing non-linearities such as the zRelu, cRelu or Mod-Relu. However we believe it is much more intuitive to consider the Cauchy-Riemann equations in polar form \footnote{Proof see: \url{https://math.stackexchange.com/
+questions/1245754/cauchy-riemann-equations-in-polar-form}}:
+\begin{align}
+\frac{\partial u}{\partial r} = \frac{1}{r} \frac{\partial v}{\partial \theta} \; \text{and} \; \frac{\partial v}{\partial r} = - \frac{1}{r} \frac{\partial u}{\partial \theta}
+\end{align}
+Which allows us to design a non-linearity using $z = re^{i\theta}$ and $f(r,\theta ) = u(r,\theta ) + iv(r,\theta )$. We will focus on non-linearities of the form:
+\begin{align}
+f(r, \theta) &= g(r,\theta,a,b) e^{i \theta} \\
+&= g(r,\theta,a,b)\cos(\theta) + ig(r,\theta,a,b)\sin(\theta)
+\end{align}
+With $a,b$ as lernable function parameters. Setting $g(r,\theta,a,b)$ to:
+\begin{align}
+g(r,\theta,a,b) = r \text{H}(\sin (\theta \cdot a\pi + b))
+\label{eq:PhaseRelu}
+\end{align}
+With H denoting the Heaviside step function and $a,b \in \mathbb{R}$. Leads to the conditions:
+\begin{align}
+\frac{\partial u}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta, \\ 
+\frac{\partial v}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta, \\
+\frac{\partial u}{\partial \theta} &= -r \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta + r \delta(\sin (\theta \cdot a\pi + b)) \cos(\theta \cdot a\pi + b))a\pi\\ 
+\frac{\partial v}{\partial \theta} &= r \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta + r \delta(\sin (\theta \cdot a\pi + b)) \sin(\theta \cdot a\pi + b))a\pi
+\end{align}
+Above $\delta$ denotes Dirac's distribution, which we consider to be zero for all practical purposes. 
+We therefore argue that this non-linearity which we call Polar-Relu is approximately holomorph\footnote{Strictly speaking it is holomorph, when excluding all points where $\sin (\theta \cdot a\pi + b)$ = 0.}.\\
+$\text{H}(\sin(\theta \cdot a \pi + b)$ sets the output to zero, whenever $\sin (\theta \cdot a\pi + b) < 0$. We must have $\theta \in [0, 2\pi]$. This means for $a = 1, b = 0$ this non-linearity removes the lower-half of the complex plane with $\theta > \pi$ where $\Re(z) < 0$. When keeping $b=0$, for $0.5 < |a| < 1$ the filtered spectrum is reduced, and for $|a| < 0.5$, no values are filtered. Working with $|a| > 1$ introduces periodically spaced smaller filters. Because the sine wave will complete more than one iteration for $\theta$. Finally $b$ rotates the filter around the origin, this parameter enables layered phase relus to individually remove different areas of the complex plane. \\
+An interesting variant of this approach can be created by adding a cosine term to equation~\ref{eq:PhaseRelu}:
+\begin{align}
+g(r,\theta,a,b,c,d) = r \text{H}(\sin (\theta \cdot a\pi + b))\text{H}(\cos (\theta \cdot c\pi + d))
+\end{align}
+This will kill any incoming complex number with a phase angle of either zero sine or cosine. The above equation can be considered a generalization of the zRelu from \cite{Guberman}\cite{Trabelsi}. Its is equivalent for $a=1, b=0, c=1, d=0$ because both cosine and sine are positive in the first quadrant. However our approach allows learning the filter regions, while approximately conserving holomorphy. We do not explicitly repeat the proof here, but hope that reads will trust us when we argue that the added cosine leads to one more term with a Dirac-pulse for which identical arguments hold. \\
+In the future filters based on other trigonometric functions could also be considered. \\
+
+These non-linearities require two function calls per block, one evaluation of the sine function, plus the call to the Heaviside-step, if the complex numbers are stored in polar-Form. In this case it would be comparable to $\text{zRelu}(z) = \text{relu}(x) + i\text{relu}(y)$. If for some reason number storage in polar form is impossible and Cartesian coordinates are used we must compute $\phi = \text{atan2}(y/x)$.
+In this case we can reformulate our non-linearity in terms of $z = x + iy$:
+\begin{align}
+f(x + iy) = \text{H}(\sin(\text{atan2}(y/x)\cdot a\pi + b))(x + iy)
+\end{align}
+Similar non-linearities such as the cRelu also require computation of the arcus-tangent function. While the cRelu proceeds by checking the angle directly using an if statement, we have to evaluate an additional sine function, making our approach sightly more expensive.
+
+\section{Rotation-GRU}
+This section proposes the rotation-GRU, a modified version of the conv-GRU, which builds on the theory above. Recall the conv-GRU definition:
+\begin{align}
+Z_t &= \sigma(W_{xz} * X_t + W_{hz} * H_{t-1} + b_z), \\
+R_t &= \sigma(W_{xr} * X_t + W_{hr} * H_{t-1} + b_r), \\
+H_t' &= f(W_{xr} * X_t) + R_t \circ (W_{hp} * H_{t-1}), \\
+H_t &= (1 - Z_t) \circ H_t' + Z_t \circ H_{t-1}.
+\end{align}
+When optimizing the convolutions, while enforcing $\| \phi \| = 1$, 
+changing the state update equation $H_t$ to:
+\begin{align}
+H_t &= W_h * ((1 - Z_t) \circ H_t' + Z_t \circ H_{t-1}).
+\end{align}
+Assuming that the gates $Z_t$ and $R_t$ keep the absolute value of 
+$((1 - Z_t) \circ H_t' + Z_t \circ H_{t-1})$ under control, like they learn to
+do in the standard conv-GRU case, the network should remain stable, because the eigenvalues of $W_h$ are normalized. A rational similar to the one in section~\ref{seq:linstab} should hold.
+Intuitively this non-linearity amounts to learning which parts of the complex plane the non-linearity should preserve for $a=1, b=0$ this will be the upper half plane. 
+
+
+\subsection{Gradients of the Rotation-GRU}
+So far we have only considered the forward pass of the optimization process. In order for our ideas to work we must also consider the backward pass. The two are similar, because in time, input and error flow follow the dynamics of the state equation $H_t$. This section examines the gradient equations for the convGRU and rotationGRU in detail. \dots ..TODO!
+
+\section{Two dimensional convolutions}
+Discrete convolution is often described as sliding a kernel over an image. This operation may be expressed in terms of matrix-vector multiplication. For example the two dimensional convolution:
+\begin{align}
+A * B =
+\begin{pmatrix}
+a_1 & a_2 \\
+a_3 & a_4
+\end{pmatrix}
+*
+\begin{pmatrix}
+b_1 & b_2 \\
+b_3 & b_4
+\end{pmatrix}
+\end{align}
+May be expressed using matrix multiplication as:
+\begin{align}
+A*B = K^T \cdot B_{\text{flat}}
+\end{align}
+Where $b_{\text{flat}}$ is a vector constructed by concatenation of B's rows.
+And the matrix K defined as:
+\begin{align} K =
+\begin{pmatrix}
+a_1 & a_2 & 0 & a_3 & a_4 & 0   & 0 & 0 &   0 \\
+0   & a_1 & a_2 & 0 & a_3 & a_4 & 0 & 0 &   0 \\
+0   & 0 & 0 & a_1 & a_2 & 0 & a_3 & a_4 &   0 \\
+0   & 0 & 0 & 0   & a_1 & a_2 & 0 & a_3 & a_4 \\
+\end{pmatrix}
+\end{align}
+Matrix $K$, describes a convolution, but is not circulant. 
+
+\subsection{Doubly block circulant matrices}
+\begin{figure}
+\input{img/Kt.tex}
+\input{img/2dcirc.tex}
+\caption{Visualization of a two dimensional convolution matrix and its square doubly circulant cousin.}
+\label{fig:2dconv}
+\end{figure}
+In order to turn the convolution matrix into a square doubly circulant matrix, padding is required in both kernel and target matrix. A doubly circulant matrix is a block matrix consisting out of circulant blocks which are arranged in a circular pattern. In order to obtain circulant blocks the circular pattern must be finished, which is why the resulting matrix will be square by definition.
+Padding $A$ and $B$ leads to\footnote{I think its probably possible to come up with a less wasteful way to do the padding i.e. remove the second zero row and column.}:
+\begin{align}
+A_p = \begin{pmatrix}
+a_1 & a_2 & 0 & 0 \\
+a_3 & a_4 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+\end{pmatrix}
+B_p = \begin{pmatrix}
+b_1 & b_2 & 0 & 0 \\
+b_3 & b_4 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 \\
+\end{pmatrix}
+\end{align}
+In this case the circular convolution matrix can be set up according to:
+\begin{align}
+C_0 &= circ(c_0) = \begin{pmatrix} a_1 & a_2 & 0 & 0 \end{pmatrix} \\
+C_1 &= circ(c_1) = \begin{pmatrix} a_2 & a_3 & 0 & 0 \end{pmatrix} \\
+C_2 &= circ(c_2) = \begin{pmatrix} 0 & 0 & 0 & 0 \end{pmatrix} \\
+C_3 &= circ(c_3) = \begin{pmatrix} 0 & 0 & 0 & 0 \end{pmatrix} \\
+\end{align}
+Which leads to the resulting matrix $C$:
+\begin{align}
+C_b = \begin{pmatrix} C_0 & C_1 & C_2 & C_3 \\
+                    C_3 & C_0 & C_1 & C_2 \\
+                    C_2 & C_3 & C_0 & C_2 \\
+                    C_1 & C_2 & C_3 & C_0 \\
+    \end{pmatrix}
+\end{align}
+A visualization of this matrix is shown in figure~\ref{fig:2dconv} on the right. Multiplication of $C_b \cdot B_{p\text{ flat}}$ will lead to a zero padded version of $K^T \cdot B_{\text{flat}}$.
+
+
+\subsection{Doubly block circulant matrices and their eigenvalues}
+\begin{figure}
+\centering
+\input{img/2dcircfreq.tex}
+\caption{Absolute values of complex doubly block circulant matrix constructed in the frequency domain.}
+\end{figure}
+
+In order to be able to enforce $\| \phi \| = 1$. We would like to be able to construct doubly block circulant matrices in their eigenspace. According to \cite[page 185]{Davis}, their diagonalization is given by:
+\begin{align} 
+C_b = \overline{(F_m \otimes F_n)^T} \Lambda (F_m \otimes F_n)
+\label{eq:dc_spec}
+\end{align}
+$F_m$ and $F_n$ denote fourier matrices. $\Lambda$ has complex eigenvalues sitting on its diagonal. Their choice determines the block structure of the resulting 
+matrix, which will be square with $m$ block containing $n$ rows each.
+Given a real input matrix we can find Lambda from:
+\begin{align}
+\Lambda = (F_m \otimes F_n) C_b \overline{(F_m \otimes F_n)^T}
+\end{align}
+We believe that~\ref{eq:dc_spec} is differentiable and should enable use to construct and optimize doubly block circulant matrices in the frequency domain. In order to ensure a real valued output $\Lambda$ must be symmetric with respect to the real axis.
+
+\subsection{The spectrum of real doubly block circulant matrices.}
+Tricky because doubly block circulants are not also circulant. So we cannot simply apply the one dimensional insight gained from working with circulants to block circulants. However block circulant spectra are point-symmetric in tow dimensions. Figures~\ref{fig:circ_spec2d} and~\ref{fig:block_circ_spec2d} illustrate this. The spectrum shown in ~\ref{fig:circ_spec2d} is symmetric along the a-Axis, when cutting after its third element and disregarding the first eigen-vale. The block circulant case shown in ~\ref{fig:circ_spec2d}, we find the same symmetry in the zeroth column and 4th row. The middle block is point symmetric. 
+
+\subsection{Fourier Space rotations.}
+Earlier work has found that rotations can be implemented in the frequency domain by shearing along 
+the two dimensions. Making use of the DFTs shift theorem \cite[page 173]{Briggs}:\footnote{\url{http://www.nontrivialzeros.net/KGL_Papers/27_Rotation_Paper_1997_qualityscan_OCR.pdf}}
+\footnote{\url{http://bigwww.epfl.ch/publications/unser9502.pdf}}
+\begin{align}
+\mathcal{D}(f_{m + m_0, n + n_0}) = \omega_M^{-m_0j}\omega_N^{-n_0k}F_{jk} \\
+\text{with } \omega_N^{nk} = e^{i2\pi nk/N}
+\end{align}
+Transformation to the frequency domain multiplication, rotation and inverse transformation, can be implemented using three matrix multiplications, when working with the DFT or as FFT, multiplication and ifft. The inverse transformation is a way to implicitly apply trigonometric interpolation\footnote{\url{https://en.wikipedia.org/wiki/Trigonometric_interpolation}}. Which takes care of interpolating the pixel values of the new rotated image.
+
+Some first numerical evidence suggests that fourier rotation matrices are unitary. This could allow us to prove stability. TODO: Proof?
+
+\subsection{Complex Memory cells}
+Idea: Come up with a complex gating mechanism. \\
+Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
+Classic multiplication gates with $0 \leq |g(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $g(x) \cdot h$ are therefore not an ideal solution. \\
+Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
+Solution: Can complex domain value deletion be implemented by rotating data points into the "dead" part of a phase-relu? Or alternatively implement forgetting by rotating and scaling the phase-relu's filter, to move the dead part where we would like to forget values? This would amount to learning $a,b$ from equation~\ref{eq:PhaseRelu}, and leave unfiltered data points untouched.
+
+\subsection{Unitary dynamic filter networks}
+Motivation: Current dynamic RNNs do not worry about stability. \\
+Idea: Adapt RNN stability theory to come up with stable dynamic RNNs. \\
+Extra motivation: I think that the steerable filter paper \cite{Freeman} was the basis for the original dynamic filter paper. Which is why I think the fourier extension of this paper \cite{Michaelis} could hold some cues for a nice extension. In particular, because outside of the vision domain, \cite{Hyland} has already shown that this is an interesting idea. 
+
+
+\begin{figure}
+\centering
+\input{img/circ_symmetrie/circ.tex}
+% \input{img/denseCircEigs.tex}
+\caption{Circulant matrix pattern and spectrum.}
+\label{fig:circ_spec2d}
+\end{figure} 
+
+\begin{figure}
+% \input{img/circ16.tex}
+\input{img/circ_symmetrie/2dcirc.tex}
+\caption{Block Circulant matrix pattern and spectrum.}
+\label{fig:block_circ_spec2d}
+\end{figure}
+
+\section{Related work}
+Normalized complex matrices where first introduced into the literature by \cite{Arjovsky}. Since then \cite{Wisdom}, expanded the reach of the unitary matrix basis. An idea that is taken further by \cite{Hyland}, which makes use Lie group theory.  
+Even tough a holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduces a novel non-linearity which is not complex-differentiable. \cite{Trabelsi} compares complex non-linearities and systematically measures performance. Furthermore complex batch-normalization is introduced.
+Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. 
+
+\begin{thebibliography}{9}
+\bibitem[Goodfellow]{goodfellow} \emph{Deep Learning},
+MIT Press 2017
+\bibitem[Strang]{strang} \emph{Linear algebra},
+MIT Press 2006
+\bibitem[Gray]{gray} \emph{Toeplitz and Circulant Matrices: A Review},
+now publishing
+\bibitem[Bronstein]{Bronstein} \emph{Springer Taschenbuch der Mathematik}, Springer Spektrum
+% \bibitem[Gers et al]{Gers} \emph{Learning to Forget: Continual Prediction with LSTM}
+\bibitem[Davis]{Davis} \emph{Circulant Matrices}, John Wiley and Sons
+\bibitem[Pascanu]{Pascanu} \emph{On the difficulty of training Recurrent Neural networks}, \url{https://arxiv.org/pdf/1211.5063.pdf}
+\bibitem[Arjovsky]{Arjovsky} \emph{Unitary Evolution Recurrent Neural networks.}
+\bibitem[Briggs]{Briggs} \emph{The DFT, an Owners Manual for the Discrete Fourier Transform.}
+\bibitem[Bornemann]{Bornemann} \emph{Funktionentheorie}, \url{http://www.springer.com/de/book/9783034804721}
+\bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, ICLR 2018 \url{https://arxiv.org/pdf/1705.09792.pdf}
+\bibitem[Hyland]{Hyland}, \emph{Learning Unitary Operators with Help From u (n).}, aaai 2017, \url{http://www.aaai.org/ocs/index.php/AAAI/AAAI17/paper/download/14930/14373}
+\bibitem[Guberman]{Guberman} \emph{On Complex Valued Convolutional Neural Networks}, \url{https://arxiv.org/pdf/1602.09046.pdf}
+\bibitem[Wisdom]{Wisdom} \emph{Full-Capacity Unitary Recurrent Neural Networks}, \url{https://arxiv.org/abs/1611.00035}
+\bibitem[Jing]{Jing} \emph{Gated Orthogonal Recurrent Units: On Learning to Forget}, \url{https://arxiv.org/pdf/1706.02761.pdf}
+\bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, \url{https://arxiv.org/pdf/1705.09792.pdf}
+\bibitem[Freeman]{Freeman} \emph{The Design and Use of Steerable Filters}, \url{http://people.csail.mit.edu/billf/www/papers/steerpaper91FreemanAdelson.pdf}
+\bibitem[Michaelis]{Michaelis} \emph{A lie group approach to steerable filters}, \url{https://www.sciencedirect.com/science/article/pii/016786559500066P?via%3Dihub}
+\end{thebibliography}
+
+\end{document}

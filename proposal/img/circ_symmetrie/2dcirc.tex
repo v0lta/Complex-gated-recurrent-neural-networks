@@ -1,0 +1,63 @@
+% This file was created by matplotlib2tikz v0.6.15.
+\begin{tikzpicture}
+
+\begin{groupplot}[group style={group size=2 by 2, vertical sep=60pt, horizontal sep=80pt}]
+\nextgroupplot[
+xmin=-0.5, xmax=24.5,
+ymin=-0.5, ymax=24.5,
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+title={Matrix-pattern},
+xlabel={x-index},
+ylabel={y-index},
+height=0.5\linewidth,
+width=0.5\linewidth
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=-0.5, xmax=24.5, ymin=24.5, ymax=-0.5] {./img/circ_symmetrie/2dcirc1.png};
+\nextgroupplot[
+xmin=-0.5, xmax=4.5,
+ymin=-0.5, ymax=4.5,
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+title={Re$(\Lambda)$},
+xlabel={x-index},
+ylabel={y-index},
+height=0.5\linewidth,
+width=0.5\linewidth
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=-0.5, xmax=4.5, ymin=4.5, ymax=-0.5] {./img/circ_symmetrie/2dcirc2.png};
+\nextgroupplot[
+xmin=-0.5, xmax=4.5,
+ymin=-0.5, ymax=4.5,
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+title={Im$(\Lambda)$},
+xlabel={x-index},
+ylabel={y-index},
+height=0.5\linewidth,
+width=0.5\linewidth
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=-0.5, xmax=4.5, ymin=4.5, ymax=-0.5] {./img/circ_symmetrie/2dcirc3.png};
+\nextgroupplot[
+xmin=-0.5, xmax=4.5,
+ymin=-0.5, ymax=4.5,
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+title={Conjugate-Plot},
+xlabel={x-index},
+ylabel={y-index},
+height=0.5\linewidth,
+width=0.5\linewidth
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=-0.5, xmax=4.5, ymin=4.5, ymax=-0.5] {./img/circ_symmetrie/2dcirc4.png};
+\end{groupplot}
+
+\end{tikzpicture}

@@ -1,0 +1,116 @@
+% This file was created by matplotlib2tikz v0.6.15.
+\begin{tikzpicture}
+
+\definecolor{color0}{rgb}{0.12156862745098,0.466666666666667,0.705882352941177}
+
+\begin{groupplot}[group style={group size=2 by 2, vertical sep=50pt, horizontal sep=70pt}]
+\nextgroupplot[
+xmin=-0.5, xmax=15.5,
+ymin=-0.5, ymax=15.5,
+tick align=inside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+xlabel={x-index},
+ylabel={y-index},
+height=0.5\linewidth,
+width=0.5\linewidth
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=-0.5, xmax=15.5, ymin=15.5, ymax=-0.5] {./img/denseCirc1.png};
+\nextgroupplot[
+xmin=-40.4226209677419, xmax=144.422620967742,
+ymin=-35.2089285714286, ymax=35.2089285714286,
+tick align=inside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+xlabel={real-part},
+ylabel={imaginary-part},
+height=0.1\linewidth,
+width=0.5\linewidth
+]
+\addplot [only marks, draw=color0, fill=color0, colormap/viridis]
+table{%
+x                      y
++1.360000000000000e+02 +0.000000000000000e+00
+-8.000000000000000e+00 -7.999999999999998e+00
+-8.000000000000000e+00 -1.972152263052530e-31
+-8.000000000000000e+00 +8.000000000000000e+00
+-3.200000000000000e+01 -3.200000000000000e+01
++2.220446049250312e-16 -1.387778780781451e-17
+-5.551115123125783e-17 -5.551115123125804e-17
++7.632783294297885e-17 +1.665334536937729e-16
+-3.200000000000000e+01 +1.577721810442024e-30
++1.249000902703300e-16 -8.326672684688689e-17
+-1.499759782661856e-31 -2.711709361697228e-31
+-2.775557561562941e-17 -1.665334536937735e-16
+-3.199999999999999e+01 +3.200000000000001e+01
+-1.526556658859594e-16 +2.359223927328457e-16
+-5.551115123125800e-17 -1.110223024625156e-16
++6.245004513516419e-17 +1.526556658859599e-16
+};
+\nextgroupplot[
+xmin=-0.75, xmax=15.75,
+ymin=-40.4, ymax=144.4,
+tick align=inside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+xlabel={position on diag$(\Lambda)$},
+ylabel={real-part},
+height=0.1\linewidth,
+width=0.5\linewidth 
+]
+\addplot [semithick, color0, forget plot]
+table {%
+0 136
+1 -8
+2 -8
+3 -8
+4 -32
+5 2.22044604925031e-16
+6 -5.55111512312578e-17
+7 7.63278329429788e-17
+8 -32
+9 1.2490009027033e-16
+10 -1.49975978266186e-31
+11 -2.77555756156294e-17
+12 -32
+13 -1.52655665885959e-16
+14 -5.5511151231258e-17
+15 6.24500451351642e-17
+};
+\nextgroupplot[
+xmin=-0.75, xmax=15.75,
+ymin=-35.2, ymax=35.2,
+tick align=inside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+y grid style={white!69.01960784313725!black},
+xlabel={position on diag$(\Lambda)$},
+ylabel={imaginary-part},
+height=0.1\linewidth,
+width=0.5\linewidth
+]
+\addplot [semithick, color0, forget plot]
+table {%
+0 0
+1 -8
+2 -1.97215226305253e-31
+3 8
+4 -32
+5 -1.38777878078145e-17
+6 -5.5511151231258e-17
+7 1.66533453693773e-16
+8 1.57772181044202e-30
+9 -8.32667268468869e-17
+10 -2.71170936169723e-31
+11 -1.66533453693773e-16
+12 32
+13 2.35922392732846e-16
+14 -1.11022302462516e-16
+15 1.5265566588596e-16
+};
+\end{groupplot}
+
+\end{tikzpicture}
