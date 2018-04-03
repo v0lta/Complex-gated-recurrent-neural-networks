@@ -71,8 +71,10 @@ With H denoting the Heaviside step function and $a,b \in \mathbb{R}$. Leads to t
 \begin{align}
 \frac{\partial u}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta, \\ 
 \frac{\partial v}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta, \\
-\frac{\partial u}{\partial \theta} &= -r \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta + r \delta(\sin (\theta \cdot a\pi + b)) \cos(\theta \cdot a\pi + b))a\pi\\ 
-\frac{\partial v}{\partial \theta} &= r \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta + r \delta(\sin (\theta \cdot a\pi + b)) \sin(\theta \cdot a\pi + b))a\pi
+\frac{\partial u}{\partial \theta} &= -r \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta \nonumber \\
+&\quad + r \delta(\sin (\theta \cdot a\pi + b)) \cos(\theta \cdot a\pi + b))a\pi \cos(\theta)\\ 
+\frac{\partial v}{\partial \theta} &= r \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta \nonumber \\
+&\quad + r \delta(\sin (\theta \cdot a\pi + b)) \cos(\theta \cdot a\pi + b))a\pi \sin(\theta)
 \end{align}
 Above $\delta$ denotes Dirac's distribution, which we consider to be zero for all practical purposes. 
 We therefore argue that this non-linearity which we call Polar-Relu is approximately holomorph\footnote{Strictly speaking it is holomorph, when excluding all points where $\sin (\theta \cdot a\pi + b)$ = 0.}.\\
@@ -124,7 +126,7 @@ Extra motivation: I think that the steerable filter paper \cite{Freeman} was the
 TODO. Linlin?
 
 \section{Background}
-\subsection{Phase-Relu approximate stability proof in Cartesian-coordinates.}
+\subsection{Phase-Relu approximate stability proof in Cartesian coordinates.}
 \label{sec:CarthesianPhaseRelu}
 We have shown that 
 \begin{align}
@@ -145,10 +147,12 @@ We recognize the form $f(z) = u + iv$. Working with the unchanged Cauchy-Riemann
 \end{align}
 and using the facts that the derivatives of $\text{atan2}(x,y)$ are equal to those of $\tan^{-1}(y/x)$ which are $\frac{\partial \tan^{-1}(y/x)}{\partial x} = -\frac{y}{x^2 + y^2}$ and $\frac{\partial \tan^{-1}(y/x)}{\partial y} = \frac{x}{x^2 + y^2}$, we derive:
 \begin{align}
-\frac{\partial u}{\partial x} &= \text{H}(\sin(\tan^{-1}(y/x))) + x\delta(\sin(\text{tan}^{-1}(y/x)))\cos(\tan^{-1}(y/x))(\frac{-y}{x^2 + y^2})(\frac{-y}{x^2}) \\
+\frac{\partial u}{\partial x} &= \text{H}(\sin(\tan^{-1}(y/x))) \nonumber \\
+&\quad +x\delta(\sin(\text{tan}^{-1}(y/x)))\cos(\tan^{-1}(y/x))(\frac{-y}{x^2 + y^2})(\frac{-y}{x^2}) \\
 \frac{\partial u}{\partial y} &= \delta(\sin(\tan^{-1}( y/x)))\cos(\tan^{-1}(y/x))(\frac{x}{x^2 + y^2}) \\
 \frac{\partial v}{\partial x} &= y\delta(\sin(\tan^{-1}( y/x)))\cos(\tan^{-1}(y/x))(\frac{-y}{x^2 + y^2})(\frac{-y}{x^2}) \\
-\frac{\partial v}{\partial y} &= \text{H}(\sin(\tan^{-1}(y/x))) + y\delta(\sin(\text{tan}^{-1}(y/x)))\cos(\tan^{-1}(y/x))(\frac{x}{x^2 + y^2})(\frac{-y}{x^2})
+\frac{\partial v}{\partial y} &= \text{H}(\sin(\tan^{-1}(y/x))) \nonumber \\
+&\quad + y\delta(\sin(\text{tan}^{-1}(y/x)))\cos(\tan^{-1}(y/x))(\frac{x}{x^2 + y^2})(\frac{1}{x})
 \end{align}
 Most of the time the Dirac terms $\delta(\cdot)$ will be zero and $\frac{\partial u}{\partial x} = \frac{\partial v}{\partial y} = \text{H}(\sin(\tan^{-1}(y/x)))$ as well as $\frac{\partial u}{\partial y} = - \frac{\partial v}{\partial x} = 0$ will hold. The derivative is zero if the non-linearity is inactive and 1 when its active and therefore bounded.
 
@@ -260,24 +264,42 @@ f(r, \theta) = \frac{1}{2}(1 + cos(\theta))r\cos(\theta) + i\frac{1}{2}(1 + cos(
 Reading of $u = \frac{1}{2}(1 + cos(\theta))r\cos(\theta)$ and $v = \frac{1}{2}(1 + cos(\theta))r\sin(\theta)$ we find:
 \begin{align}
 \frac{\partial u}{\partial r} &= \frac{1}{2}(1 + \cos(\theta))\cos(\theta) \\
-\frac{\partial u}{\partial \theta} &= -r\frac{1}{2}(1 + \cos(\theta))\sin(\theta) - r\frac{1}{2}(\sin(\theta))\cos(\theta) \\
+\frac{\partial u}{\partial \theta} &= -r\frac{1}{2}(1 + \cos(\theta))\sin(\theta) - r\frac{1}{2}\sin(\theta)\cos(\theta) \\
 \frac{\partial v}{\partial r} &= \frac{1}{2}(1 + \cos(\theta))\sin(\theta) \\
-\frac{\partial v}{\partial \theta} &= r\frac{1}{2}(1 + \cos(\theta)\cos(\theta)) - r\frac{1}{2}(\sin(\theta))\cos(\theta)
+\frac{\partial v}{\partial \theta} &= r\frac{1}{2}(1 + \cos(\theta))\cos(\theta)) - r\frac{1}{2}\sin(\theta)\cos(\theta)
 \end{align}
 And therefore we require:
 \begin{align}
 \frac{\partial u}{\partial r} = \frac{1}{2}(1 + \cos(\theta))\cos(\theta) &= \frac{\partial v}{r\partial \theta} =  \frac{1}{2}(1 + \cos(\theta)\cos(\theta)) - r\frac{1}{2}\sin(\theta)\cos(\theta) \\
 \Leftrightarrow 0  &= - r\frac{1}{2}\sin(\theta)\cos(\theta) \\
 \end{align}
-Which is holomorph when excluding everything except for the real and imaginary axes, there the trigonometric functions are zero. Where the derivative exists it is unstable when $\cos(\theta) > 0$, which happens if $0 \leq \theta < \pi/2$ and $3/2\pi < \theta \leq 2\pi$. This is the case on the real axis where $\theta = 0$. In other words the Cardioid has a defined and stable derivative only on the imaginary axis.
+Which is holomorph at $r=0$. When $r \neq 0$ excluding everything except for the real and imaginary axes is necessary, there the trigonometric functions are zero. Where the derivative exists it is unstable when $\cos(\theta) > 0$, which happens if $0 \leq \theta < \pi/2$ and $3/2\pi < \theta \leq 2\pi$. This is the case on the real axis where $\theta = 0$. In other words the Cardioid has a defined and stable derivative only on the imaginary axis.
 
 \subsubsection{Phase-amplitude activations}
 \cite{Scardapane} cites these as:
 \begin{align}
 f(z) = \tanh(r/m)e^{i\theta}
 \end{align}
-Am pretty sure this will be non-holomorph, because the derivatives of the hyperbolic tangent will not be killed by a Dirac. I also think the derivative of the tanh is unbounded....\\
-TODO (Moritz): Do the math.
+Considering the polar C.R. equations:
+\begin{align}
+f(r,\theta) &= \cos(\theta)\tan^{-1}(r/m) + i\sin(\theta)\tan^{-1}(r/m) \\
+            &\Rightarrow u + iv \nonumber \\
+\frac{\partial u}{\partial r} &= \cos(\theta)\text{sech}^2(r/m)(1/m) \\
+\frac{\partial u}{\partial \theta} &= -\sin(\theta)\tanh(r/m) \\
+\frac{\partial v}{\partial r} &= \sin(\theta)\text{sech}^2(r/m)(1/m) \\
+\frac{\partial v}{\partial \theta} &= \cos(\theta)\tanh(r/m) \\
+\Rightarrow  \frac{\partial u}{\partial r} &=\frac{\partial v}{r\partial \theta} \nonumber \\
+\Leftrightarrow \qquad & \cos(\theta)\text{sech}^2(r/m)(1/m) = \frac{1}{r}\cos(\theta)\tanh(r/m) \\
+\Leftrightarrow \qquad & \text{sech}^2(r/m)(r/m) = \tanh(r/m)
+\label{eq:holo-pa}
+\end{align}
+\begin{figure}
+\centering
+\includegraphics{./img/phase_amplitude_cond.pdf}
+\caption{Plot of the holomorphy condition for the Phase-amplitude activation. $\tanh(r/m)$ is shown in red, $\text{sech}^2(r/m)(r/m)$ is shown in blue. The yellow circle indicates the point at $(0,0)$.}
+\label{fig:phase_amp}
+\end{figure}
+This activation is holomorph at $r/m = 0$. And approximately analytic for $r/m \approx 0$ as shown in figure~\ref{fig:phase_amp}, the problem here is that this non-linearity breaks magnitude information by rescaling them, it must therefore be non-holomorph for large inputs.
 
 \subsection{Backward mode automatic differentiation gradients}
 Consider the non-linear network proposed in \cite{Pascanu}:
