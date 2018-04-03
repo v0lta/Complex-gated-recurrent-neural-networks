@@ -103,13 +103,13 @@ Intuitively this non-linearity amounts to learning which parts of the complex pl
 Equations:
 Re-considering the memory cell from \cite{Pascanu} and \cite{Arjovsky}:
 \begin{align}
-h_{t+1} = \mathbf{W}_{r}\sigma(h_{t-1}) + \mathbf{W}_{i} \mathbf{u}_t + \mathbf{b}\end{align}
-\cite{Arjovsky} chooses sigma to be the modRelu. We expand their model into:
+\mathbf{h}_{t+1} = \mathbf{W}_{r}\sigma(h_{t-1}) + \mathbf{W}_{i} \mathbf{u}_t + \mathbf{b}\end{align}
+\cite{Arjovsky} chooses sigma to be the modRelu (see section~\ref{sec:modRelu}). We expand their model and define:
 \begin{align}
 \mathbf{h}_{t+1} = \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,c,d) + \mathbf{b}
 \end{align}
 With $f(z, a, b)$ defined as our novel Phase-Relu serving as forget gate and $f(z, c, d)$ being another Phase-Relu working as input gate. Since our non-linearity is based on an odd sine wave we have $-\sin(\theta a \pi + b) = \sin(-\theta a \pi - b)$. Gate coupling can therefore be achieved by setting $c = -a$ as well as $d = - b$, this choice ensures that values which are deleted by the forget-gate will be replaced by the input gate.
-Last but not least we can interpret the parameters $a, b$ as $p = a + ib$. And use a complex CNN $\gamma$, to compute $\gamma([\mathbf{h}_{t-1}, \mathbf{u}_t]) = a + ib.$, which makes our gates responsive to input and memory.
+Last but not least we can interpret the parameters $a, b$ as $p = a + ib$. And use a complex neural network $\gamma$, to compute $\gamma([\mathbf{h}_{t-1}, \mathbf{u}_t]) = a + ib.$, which makes our gates responsive to input and memory.
 We finally define our complex unitary memory unit (CUMU) as:
 \begin{align}
 (a + ib) &= \gamma([\mathbf{u_t}, \mathbf{h_{t-1}}]) \\
@@ -208,6 +208,7 @@ holds. On the real and imaginary axes, the two areas are not smoothly connected,
 Which is an equivalent way to write the zRelu, its Dirac pulse derivatives are one on the real and imaginary axis, which is why the this non-linearity is not holomorph there. The derivative is either zero or one and therefore bounded. These desirable properties come at the cost of having to throw away three quarters of the complex plane, which seems unnecessarily wasteful.
 
 \subsubsection{modRelu}
+\label{sec:modRelu}
 The modRelu is defined as \cite{Arjovsky}:
 \begin{align}
 f(z) = \text{Relu}(\|z\| + b) \frac{z}{\|z\|}.
