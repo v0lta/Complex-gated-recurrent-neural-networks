@@ -39,7 +39,7 @@ We show that our adaptive phase Relu is practically holomorph and overcomes limi
 It turns out that we do not need to work with a constrained optimization algorithm here, but can instead rewrite the problem in an unconstrained way, and use libraries optimized for large scale unconstrained optimization such as tensorflow or pytorch.
 \end{abstract}
 
-\section{Introcution}
+\section{Introduction}
 The training process of artificial neural networks is not necessarily stable. Unstable problem formulations lead to problems which are hard to optimize and converge slowly. Recently \cite{Arjovsky} has been able to prove that recurrent neural networks with normalized eigenvalues and bounded activiation derivatives must be stable. 
 
 \section{Related work}
@@ -47,7 +47,7 @@ Normalized complex matrices where first introduced into the literature by \cite{
 Even tough a holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduces a novel non-linearity which is not complex-differentiable. \cite{Trabelsi} compares complex non-linearities and systematically measures performance. Furthermore complex batch-normalization is introduced.
 Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. 
 
-\section{Phase-Rotation filters}
+\section{Phase-Relus}
 Holomorph functions $f(x,y) = u(x,y) + iv(x,y)$ must satisfy the Cauchy-Riemann equations:
 \begin{align}
 \frac{\partial u}{\partial x} = \frac{\partial u}{\partial y} \; \text{and} \; \frac{\partial u}{\partial y} = -\frac{\partial v}{\partial x}  
@@ -89,14 +89,40 @@ In the future filters based on other trigonometric functions could also be consi
 These non-linearities require two function calls per block, one evaluation of the sine function, plus the call to the Heaviside-step, if the complex numbers are stored in polar-Form. In this case it would be comparable to $\text{zRelu}(z) = \text{relu}(x) + i\text{relu}(y)$. If for some reason number storage in polar form is impossible and Cartesian coordinates are used we must compute $\phi = \text{atan2}(y/x)$.
 In this case we can reformulate our non-linearity in terms of $z = x + iy$:
 \begin{align}
-f(x + iy) = \text{H}(\sin(\text{atan2}(x,y)\cdot a\pi + b))(x + iy)
+f(x + iy, a, b) = \text{H}(\sin(\text{atan2}(x,y)\cdot a\pi + b))(x + iy)
 \end{align}
 Similar non-linearities such as the cRelu also require computation of the arcus-tangent function. While the cRelu proceeds by checking the angle directly using an if statement, we have to evaluate an additional sine function, making our approach sightly more expensive.
 
+\section{Complex Unitary Memory cells}
+Idea: Come up with a complex gating mechanism. \\
+Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
+Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore not an ideal solution. \\
+Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
+Solution: Can complex domain value deletion be implemented by rotating data points into the "dead" part of a phase-relu? Or alternatively implement forgetting by rotating and scaling the phase-relu's filter, to move the dead part where we would like to forget values? This would amount to learning $a,b$ from equation~\ref{eq:PhaseRelu}, and leave unfiltered data points untouched.
+Intuitively this non-linearity amounts to learning which parts of the complex plane the non-linearity should preserve for $a=1, b=0$ this will be the upper half plane. \\
+Equations:
+Re-considering the memory cell from \cite{Pascanu} and \cite{Arjovsky}:
+\begin{align}
+h_{t+1} = \mathbf{W}_{r}\sigma(h_{t-1}) + \mathbf{W}_{i} \mathbf{u}_t + \mathbf{b}\end{align}
+\cite{Arjovsky} chooses sigma to be the modRelu. We expand their model into:
+\begin{align}
+\mathbf{h}_{t+1} = \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,c,d) + \mathbf{b}
+\end{align}
+With $f(z, a, b)$ defined as our novel Phase-Relu serving as forget gate and $f(z, c, d)$ being another Phase-Relu working as input gate. Since our non-linearity is based on an odd sine wave we have $-\sin(\theta a \pi + b) = \sin(-\theta a \pi - b)$. Gate coupling can therefore be achieved by setting $c = -a$ as well as $d = - b$, this choice ensures that values which are deleted by the forget-gate will be replaced by the input gate.
+Last but not least we can interpret the parameters $a, b$ as $p = a + ib$. And use a complex CNN $\gamma$, to compute $\gamma([\mathbf{h}_{t-1}, \mathbf{u}_t]) = a + ib.$, which makes our gates responsive to input and memory.
+We finally define our complex unitary memory unit (CUMU) as:
+\begin{align}
+(a + ib) &= \gamma([\mathbf{u_t}, \mathbf{h_{t-1}}]) \\
+\mathbf{h}_{t+1} &= \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,-a,-b) + \mathbf{b}
+\end{align}
 
+\subsection{Proof of stability}
+TODO: Modify the proof from \cite{Arjovsky} to work with our cell.
 
+\subsection{Results}
+TODO: Implement and measure performance.
 
-\section{Applications}
+\section{Other Ideas}
 \subsection{Fourier Space rotations.}
 Earlier work has found that rotations can be implemented in the frequency domain by shearing along 
 the two dimensions. Making use of the DFTs shift theorem \cite[page 173]{Briggs}:\footnote{\url{http://www.nontrivialzeros.net/KGL_Papers/27_Rotation_Paper_1997_qualityscan_OCR.pdf}}
@@ -108,14 +134,6 @@ the two dimensions. Making use of the DFTs shift theorem \cite[page 173]{Briggs}
 Transformation to the frequency domain multiplication, rotation and inverse transformation, can be implemented using three matrix multiplications, when working with the DFT or as FFT, multiplication and ifft. The inverse transformation is a way to implicitly apply trigonometric interpolation\footnote{\url{https://en.wikipedia.org/wiki/Trigonometric_interpolation}}. Which takes care of interpolating the pixel values of the new rotated image.
 
 Some first numerical evidence suggests that fourier rotation matrices are unitary. This could allow us to prove stability. TODO: Proof?
-
-\subsection{Complex Memory cells}
-Idea: Come up with a complex gating mechanism. \\
-Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
-Classic multiplication gates with $0 \leq |g(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $g(x) \cdot h$ are therefore not an ideal solution. \\
-Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
-Solution: Can complex domain value deletion be implemented by rotating data points into the "dead" part of a phase-relu? Or alternatively implement forgetting by rotating and scaling the phase-relu's filter, to move the dead part where we would like to forget values? This would amount to learning $a,b$ from equation~\ref{eq:PhaseRelu}, and leave unfiltered data points untouched.
-Intuitively this non-linearity amounts to learning which parts of the complex plane the non-linearity should preserve for $a=1, b=0$ this will be the upper half plane. 
 
 \subsection{Unitary dynamic filter networks}
 Motivation: Current dynamic RNNs do not worry about stability. \\
@@ -275,7 +293,7 @@ And therefore we require:
 \end{align}
 Which is holomorph at $r=0$. When $r \neq 0$ excluding everything except for the real and imaginary axes is necessary, there the trigonometric functions are zero. Where the derivative exists it is unstable when $\cos(\theta) > 0$, which happens if $0 \leq \theta < \pi/2$ and $3/2\pi < \theta \leq 2\pi$. This is the case on the real axis where $\theta = 0$. In other words the Cardioid has a defined and stable derivative only on the imaginary axis.
 
-\subsubsection{Phase-amplitude activations}
+\subsubsection{Phase-amplitude activation}
 \cite{Scardapane} cites these as:
 \begin{align}
 f(z) = \tanh(r/m)e^{i\theta}
@@ -296,10 +314,10 @@ f(r,\theta) &= \cos(\theta)\tan^{-1}(r/m) + i\sin(\theta)\tan^{-1}(r/m) \\
 \begin{figure}
 \centering
 \includegraphics{./img/phase_amplitude_cond.pdf}
-\caption{Plot of the holomorphy condition for the Phase-amplitude activation. $\tanh(r/m)$ is shown in red, $\text{sech}^2(r/m)(r/m)$ is shown in blue. The yellow circle indicates the point at $(0,0)$.}
+\caption{Plot of the holomorphy condition's two sides for the Phase-amplitude activation. $\tanh(r/m)$ is shown in red, $\text{sech}^2(r/m)(r/m)$ is shown in blue. The yellow circle indicates the point at $(0,0)$.}
 \label{fig:phase_amp}
 \end{figure}
-This activation is holomorph at $r/m = 0$. And approximately analytic for $r/m \approx 0$ as shown in figure~\ref{fig:phase_amp}, the problem here is that this non-linearity breaks magnitude information by rescaling them, it must therefore be non-holomorph for large inputs.
+This activation is holomorph at $r/m = 0$. And approximately analytic for $r/m \approx 0$ as shown in figure~\ref{fig:phase_amp}, the problem here is that this non-linearity breaks magnitude information by rescaling them, it must therefore be non-holomorph for large inputs. 
 
 \subsection{Backward mode automatic differentiation gradients}
 Consider the non-linear network proposed in \cite{Pascanu}:
