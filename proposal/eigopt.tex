@@ -8,6 +8,7 @@
 \usepgfplotslibrary{groupplots}
 \pgfplotsset{compat=1.13}
 \usepackage[hidelinks]{hyperref}
+\usepackage{standalone}
 
 \title{Adaptive phase filter Networks}
 \author{Moritz Wolter  \\
@@ -67,7 +68,15 @@ With $a,b$ as lernable function parameters. Setting $g(r,\theta,a,b)$ to:
 g(r,\theta,a,b) = r \text{H}(\sin (\theta \cdot a\pi + b))
 \label{eq:PhaseRelu}
 \end{align}
-With H denoting the Heaviside step function and $a,b \in \mathbb{R}$. Leads to the conditions:
+With H denoting the Heaviside step function and $a,b \in \mathbb{R}$.
+\begin{figure}
+    \centering
+    \includestandalone{image-code/sine_step}
+    \includestandalone{image-code/shifted_sine_step}
+    \caption{Plot of the $\sin(\theta a\pi + b\pi)$ and $\text{H}(\sin(\theta a\pi + b\pi))$ with $a=1, b=0$ (left) and $a=2, b=0.1$}
+    \label{fig:step_sine}
+\end{figure}
+Leads to the conditions:
 \begin{align}
 \frac{\partial u}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \cos \theta, \\ 
 \frac{\partial v}{\partial r} &= \text{H}(\sin (\theta \cdot a\pi + b)) \sin \theta, \\
@@ -109,6 +118,11 @@ Re-considering the memory cell from \cite{Pascanu} and \cite{Arjovsky}:
 \mathbf{h}_{t+1} = \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,c,d) + \mathbf{b}
 \end{align}
 With $f(z, a, b)$ defined as our novel Phase-Relu serving as forget gate and $f(z, c, d)$ being another Phase-Relu working as input gate. Since our non-linearity is based on an odd sine wave we have $-\sin(\theta a \pi + b) = \sin(-\theta a \pi - b)$. Gate coupling can therefore be achieved by setting $c = -a$ as well as $d = - b$, this choice ensures that values which are deleted by the forget-gate will be replaced by the input gate.
+\begin{figure}
+\includestandalone{image-code/gate_sine_step}
+\includegraphics[scale=0.45]{image-code/gate_polar}
+\caption{Plots illustrating our gating mechanics, the functions $\text{H}(\sin(\theta a\pi + b\pi))$ as well as $\text{H}(\sin(\theta -a\pi - b\pi))$ are shown. In the polar plot the underlying sine-wave $|\sin(\theta a\pi + b\pi)|$ is included in blue.}
+\end{figure}
 Last but not least we can interpret the parameters $a, b$ as $p = a + ib$. And use a complex neural network $\gamma$, to compute $\gamma([\mathbf{h}_{t-1}, \mathbf{u}_t]) = a + ib.$, which makes our gates responsive to input and memory.
 We finally define our complex unitary memory unit (CUMU) as:
 \begin{align}
@@ -595,31 +609,32 @@ do in the standard conv-GRU case, the network should remain stable, because the 
 \subsubsection{Gradients of the Rotation-GRU}
 So far we have only considered the forward pass of the optimization process. In order for our ideas to work we must also consider the backward pass. The two are similar, because in time, input and error flow follow the dynamics of the state equation $H_t$. This section examines the gradient equations for the convGRU and rotationGRU in detail. \dots ..TODO!
 
-
-\begin{thebibliography}{9}
-\bibitem[Goodfellow]{goodfellow} \emph{Deep Learning},
-MIT Press 2017
-\bibitem[Strang]{strang} \emph{Linear algebra},
-MIT Press 2006
-\bibitem[Gray]{gray} \emph{Toeplitz and Circulant Matrices: A Review},
-now publishing
-\bibitem[Bronstein]{Bronstein} \emph{Springer Taschenbuch der Mathematik}, Springer Spektrum
-% \bibitem[Gers et al]{Gers} \emph{Learning to Forget: Continual Prediction with LSTM}
-\bibitem[Davis]{Davis} \emph{Circulant Matrices}, John Wiley and Sons
-\bibitem[Pascanu]{Pascanu} \emph{On the difficulty of training Recurrent Neural networks}, \url{https://arxiv.org/pdf/1211.5063.pdf}
-\bibitem[Arjovsky]{Arjovsky} \emph{Unitary Evolution Recurrent Neural networks.}
-\bibitem[Briggs]{Briggs} \emph{The DFT, an Owners Manual for the Discrete Fourier Transform.}
-\bibitem[Bornemann]{Bornemann} \emph{Funktionentheorie}, \url{http://www.springer.com/de/book/9783034804721}
-\bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, ICLR 2018 \url{https://arxiv.org/pdf/1705.09792.pdf}
-\bibitem[Hyland]{Hyland}, \emph{Learning Unitary Operators with Help From u (n).}, aaai 2017, \url{http://www.aaai.org/ocs/index.php/AAAI/AAAI17/paper/download/14930/14373}
-\bibitem[Guberman]{Guberman} \emph{On Complex Valued Convolutional Neural Networks}, \url{https://arxiv.org/pdf/1602.09046.pdf}
-\bibitem[Wisdom]{Wisdom} \emph{Full-Capacity Unitary Recurrent Neural Networks}, \url{https://arxiv.org/abs/1611.00035}
-\bibitem[Jing]{Jing} \emph{Gated Orthogonal Recurrent Units: On Learning to Forget}, \url{https://arxiv.org/pdf/1706.02761.pdf}
-\bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, \url{https://arxiv.org/pdf/1705.09792.pdf}
-\bibitem[Freeman]{Freeman} \emph{The Design and Use of Steerable Filters}, \url{http://people.csail.mit.edu/billf/www/papers/steerpaper91FreemanAdelson.pdf}
-\bibitem[Michaelis]{Michaelis} \emph{A lie group approach to steerable filters}, \url{https://www.sciencedirect.com/science/article/pii/016786559500066P?via%3Dihub}
-\bibitem[Virtue]{Virtue} \emph{BETTER THAN REAL: COMPLEX-VALUED NEURAL NETS FOR MRI FINGERPRINTING}, \url{https://arxiv.org/pdf/1707.00070.pdf}
-\bibitem[Scardapane]{Scardapane}, \emph{Complex-valued Neural Networks with Non-parametric Activation Functions}, \url{https://arxiv.org/pdf/1802.08026.pdf}
-\end{thebibliography}
+\bibliographystyle{plain}
+\bibliography{literature}
+% \begin{thebibliography}{9}
+% \bibitem[Goodfellow]{goodfellow} \emph{Deep Learning},
+% MIT Press 2017
+% \bibitem[Strang]{strang} \emph{Linear algebra},
+% MIT Press 2006
+% \bibitem[Gray]{gray} \emph{Toeplitz and Circulant Matrices: A Review},
+% now publishing
+% \bibitem[Bronstein]{Bronstein} \emph{Springer Taschenbuch der Mathematik}, Springer Spektrum
+% % \bibitem[Gers et al]{Gers} \emph{Learning to Forget: Continual Prediction with LSTM}
+% \bibitem[Davis]{Davis} \emph{Circulant Matrices}, John Wiley and Sons
+% \bibitem[Pascanu]{Pascanu} \emph{On the difficulty of training Recurrent Neural networks}, \url{https://arxiv.org/pdf/1211.5063.pdf}
+% \bibitem[Arjovsky]{Arjovsky} \emph{Unitary Evolution Recurrent Neural networks.}
+% \bibitem[Briggs]{Briggs} \emph{The DFT, an Owners Manual for the Discrete Fourier Transform.}
+% \bibitem[Bornemann]{Bornemann} \emph{Funktionentheorie}, \url{http://www.springer.com/de/book/9783034804721}
+% \bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, ICLR 2018 \url{https://arxiv.org/pdf/1705.09792.pdf}
+% \bibitem[Hyland]{Hyland}, \emph{Learning Unitary Operators with Help From u (n).}, aaai 2017, \url{http://www.aaai.org/ocs/index.php/AAAI/AAAI17/paper/download/14930/14373}
+% \bibitem[Guberman]{Guberman} \emph{On Complex Valued Convolutional Neural Networks}, \url{https://arxiv.org/pdf/1602.09046.pdf}
+% \bibitem[Wisdom]{Wisdom} \emph{Full-Capacity Unitary Recurrent Neural Networks}, \url{https://arxiv.org/abs/1611.00035}
+% \bibitem[Jing]{Jing} \emph{Gated Orthogonal Recurrent Units: On Learning to Forget}, \url{https://arxiv.org/pdf/1706.02761.pdf}
+% \bibitem[Trabelsi]{Trabelsi} \emph{Deep Complex Networks}, \url{https://arxiv.org/pdf/1705.09792.pdf}
+% \bibitem[Freeman]{Freeman} \emph{The Design and Use of Steerable Filters}, \url{http://people.csail.mit.edu/billf/www/papers/steerpaper91FreemanAdelson.pdf}
+% \bibitem[Michaelis]{Michaelis} \emph{A lie group approach to steerable filters}, \url{https://www.sciencedirect.com/science/article/pii/016786559500066P?via%3Dihub}
+% \bibitem[Virtue]{Virtue} \emph{BETTER THAN REAL: COMPLEX-VALUED NEURAL NETS FOR MRI FINGERPRINTING}, \url{https://arxiv.org/pdf/1707.00070.pdf}
+% \bibitem[Scardapane]{Scardapane}, \emph{Complex-valued Neural Networks with Non-parametric Activation Functions}, \url{https://arxiv.org/pdf/1802.08026.pdf}
+% \end{thebibliography}
 
 \end{document}

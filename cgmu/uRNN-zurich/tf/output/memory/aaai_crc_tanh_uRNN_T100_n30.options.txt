@@ -1,0 +1,11 @@
+task memory
+verbose False
+learning_rate 0.001
+data_path input/memory/100000_10000_1479996618_100.pk
+batch_size 20
+state_size 30
+T 100
+num_epochs 10
+model uRNN
+identifier aaai_crc_tanh
+gradient_clipping False

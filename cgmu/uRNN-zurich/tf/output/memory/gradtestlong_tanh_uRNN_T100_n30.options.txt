@@ -1,0 +1,11 @@
+task memory
+verbose False
+learning_rate 0.001
+data_path input/memory/1472550931_100.pk
+batch_size 20
+state_size 30
+T 100
+num_epochs 10
+model uRNN
+identifier gradtestlong_tanh
+gradient_clipping False
