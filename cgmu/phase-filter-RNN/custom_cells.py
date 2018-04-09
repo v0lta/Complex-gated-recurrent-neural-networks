@@ -4,14 +4,33 @@
         1.) The original URNN-cell.
         2.) Our Phase-Relu cell.
 """
+import collections
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.rnn import LSTMStateTuple
-
+import ipdb; ipdb.set_trace()
 
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # TODO: INITIALIZATION !!
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+_URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
+
+
+class URNNStateTuple(_URNNStateTuple):
+    """Tuple used by LSTM Cells for `state_size`, `zero_state`, and output state.
+       Stores two elements: `(c, h)`, in that order.
+       Only used when `state_is_tuple=True`.
+    """
+    slots__ = ()
+
+    @property
+    def dtype(self):
+        (c, h) = self
+        if c.dtype != h.dtype:
+            raise TypeError("Inconsistent internal state: %s vs %s" %
+                            (str(c.dtype), str(h.dtype)))
+        return c.dtype
+
 
 def modRelu(z, reuse):
     """
@@ -48,7 +67,7 @@ def ref_mul(h, state_size, no, reuse):
     Returns:
         R*h
     """
-    with tf.variable_scope("reflection_v:" + str(no), reuse=reuse):
+    with tf.variable_scope("reflection_v_" + str(no), reuse=reuse):
         vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32)
         vi = tf.get_variable('vi', shape=[state_size, 1], dtype=tf.float32)
 
@@ -71,13 +90,13 @@ def diag_mul(h, state_size, no, reuse):
         R*h
     """
 
-    with tf.variable_scope("diag_phis:" + str(no), reuse=reuse):
+    with tf.variable_scope("diag_phis_" + str(no), reuse=reuse):
         # TODO: Enforce lambda = 1!!
         omega = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32)
         dr = tf.cos(omega)
         di = tf.sin(omega)
 
-    with tf.variable_scope("diag_mul:" + str(no)):
+    with tf.variable_scope("diag_mul_" + str(no)):
         D = tf.diag(tf.complex(dr, di))
         return tf.matmul(D, h)
 
@@ -90,7 +109,7 @@ def permutation(h, state_size, no, reuse):
     Output:
         hp: the permuted state.
     """
-    with tf.variable_scope("permutation:" + str(no), reuse):
+    with tf.variable_scope("permutation_" + str(no), reuse):
         init = tf.complex(np.random.permutation(np.eye(state_size, dtype=np.float32)),
                           tf.constant(0.0, dtype=tf.float32))
         P = tf.get_variable("Permutation", dtype=tf.complex64,
@@ -150,8 +169,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
     @property
     def state_size(self):
-        return (LSTMStateTuple(self._num_units, self._num_units)
-                if self._state_is_tuple else 2 * self._num_units)
+        return URNNStateTuple(self._num_units, self._num_units)
 
     @property
     def output_size(self):
@@ -160,13 +178,11 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         else:
             return self._output_size
 
-    @property
-    def zero_state(self):
-        out = tf.complex(tf.zeros([self._output_size, 1], dtype=tf.float32),
-                         tf.zeros([self._output_size, 1], dtype=tf.float32))
+    def zero_state(self, batch_size, dtype=tf.float32):
+        out = tf.zeros([self._output_size, 1], dtype=tf.float32)
         hidden = tf.complex(tf.zeros([self._num_units, 1], dtype=tf.float32),
                             tf.zeros([self._num_units, 1], dtype=tf.float32))
-        return LSTMStateTuple(out, hidden)
+        return URNNStateTuple(out, hidden)
 
     def call(self, inputs, state, reuse=False):
         """
@@ -206,4 +222,4 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
             # By fft.
             # TODO.
 
-        return LSTMStateTuple(output, ht)
+        return URNNStateTuple(output, ht)
