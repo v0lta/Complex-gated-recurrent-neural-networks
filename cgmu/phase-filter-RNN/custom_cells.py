@@ -52,28 +52,30 @@ def mod_relu(z, scope='', reuse=None):
                           rescale * tf.imag(z))
 
 
-def phase_relu(z, scope='', reuse=None, is_coupled=False):
+def phase_relu(z, scope='', reuse=None, coupled=False):
     """
         Set up the Phase Relu non-linearity from our paper.
+        TODO: Register gradient?
     """
-    def step(n):
-        """ Elementwise implementation of the Heaviside step."""
-        return tf.cast(n > 0, tf.float32)
+    def richards(n, k):
+        """ Elementwise implementation of the Heaviside step.
+        """
+        # return tf.cast(n > 0, tf.float32)  # this is bad grad=0!
+        return tf.nn.sigmoid(k*n)
 
     with tf.variable_scope('phase_relu' + scope, reuse=reuse):
         a = tf.get_variable('a', [], dtype=tf.float32,
                             initializer=urnd_init(1.99, 2.01))
         b = tf.get_variable('b', [], dtype=tf.float32,
                             initializer=urnd_init(-0.01, 0.01))
-        if is_coupled:
+        k = tf.constant(5.0)
+        if coupled:
             a = -a
             b = -b
-
         pi = tf.constant(np.pi)
-
         r = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
         theta = tf.atan2(tf.real(z), tf.imag(z))
-        g = step(tf.sin(theta*a*pi + b*pi))*r
+        g = richards(tf.sin(theta*a*pi + b*pi)*r, k)
         return tf.complex(g * tf.real(z),
                           g * tf.imag(z))
 
@@ -290,10 +292,12 @@ class UnitaryMemoryCell(UnitaryCell):
             Evaluate the RNN cell. Using
             h_(t+1) = U_t*f(h_t) + V_t x_t
         """
-        with tf.variable_scope("UnitaryCell"):
+        with tf.variable_scope("UnitaryMemoryCell"):
+
             last_out, last_h = state
+            fh = self._activation(last_h, '', reuse=self._reuse)
             # Compute the hidden part.
-            step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+            step1 = diag_mul(fh, self._num_units, 0, self._reuse)
             step2 = tf.spectral.fft(step1)
             step3 = ref_mul(step2, self._num_units, 0, self._reuse)
             step4 = permutation(step3, self._num_units, 0, self._reuse)
@@ -312,14 +316,12 @@ class UnitaryMemoryCell(UnitaryCell):
 
             # By FFT.
             # TODO.
-
-            zt = Uh + self._activation(Vx, 'input', self._reuse)
-            ht = self._activation(zt, 'forget', self._reuse)
+            ht = Uh + self._activation(Vx, '', reuse=True, coupled=True)
 
             # Mapping the state back onto the real axis.
             # By mapping.
-
             output = C_to_R(ht, self.output_size, reuse=self._reuse)
+            # ht = self._activation(ht, '', reuse=True, coupled=True)
 
             # By fft.
             # TODO.

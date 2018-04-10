@@ -67,10 +67,11 @@ with graph.as_default():
     y_hat = y_hat[:, -1, :]  # only the final output is interesting.
     loss = tf.losses.mean_squared_error(y, y_hat)
     optimizer = tf.train.RMSPropOptimizer(learning_rate)
-    # gvs = optimizer.compute_gradients(loss)
-    # capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-    # train_op = optimizer.apply_gradients(capped_gvs)
-    train_op = optimizer.minimize(loss)
+    with tf.variable_scope("gradient_clipping"):
+        gvs = optimizer.compute_gradients(loss)
+        capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+        train_op = optimizer.apply_gradients(capped_gvs)
+    # train_op = optimizer.minimize(loss)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.scalar('mse', loss)
 
@@ -82,7 +83,7 @@ config = tf.ConfigProto(allow_soft_placement=True,
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = '_' + str(time_steps) + '_' + str(n_train) + '_' + str(n_test) \
     + '_' + str(n_units) + '_' + str(learning_rate) + '_' + str(batch_size) \
-    + '_' + cell._activation.__name__
+    + '_' + cell._activation.__name__ + '_' + cell.__class__.__name__
 summary_writer = tf.summary.FileWriter('cmplx_logs/' + time_str + param_str, graph=graph)
 
 
