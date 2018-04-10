@@ -39,6 +39,8 @@ def mod_relu(z, scope='', reuse=None):
         Implementation of the modRelu from Arjovski et al.
         f(z) = relu(|z| + b)(z / |z|) or
         f(r,theta) = relu(r + b)e^(i*theta)
+        b is initialized to zero, this leads to a network, which
+        is linear during early optimization.
     Input:
         z: complex input.
         b: 'dead' zone radius.
@@ -57,6 +59,8 @@ def mod_relu(z, scope='', reuse=None):
 def phase_relu(z, scope='', reuse=None):
     """
         Set up the Phase Relu non-linearity from our paper.
+        a is initialized to two, b to zero, this leads to a network,
+        which is linear during early optimization.
     """
     def step(n):
         """ Elementwise implementation of the Heaviside step."""
@@ -87,9 +91,15 @@ def ref_mul(h, state_size, no, reuse):
     Returns:
         R*h
     """
+
+    # initialization from Hyland. ?
+    scale = np.sqrt(6.0 / (2 + state_size * 2))
+
     with tf.variable_scope("reflection_v_" + str(no), reuse=reuse):
-        vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32)
-        vi = tf.get_variable('vi', shape=[state_size, 1], dtype=tf.float32)
+        vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32,
+                             initializer=urnd_init(-scale, scale))
+        vi = tf.get_variable('vi', shape=[state_size, 1], dtype=tf.float32,
+                             initializer=urnd_init(-scale, scale))
 
     with tf.variable_scope("ref_mul_" + str(no), reuse=reuse):
         v = tf.complex(vr, vi)
@@ -202,9 +212,19 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
     def zero_state(self, batch_size, dtype=tf.float32):
         out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
-        hidden = tf.complex(tf.zeros([batch_size, self._num_units], dtype=tf.float32),
-                            tf.zeros([batch_size, self._num_units], dtype=tf.float32))
-        return URNNStateTuple(out, hidden)
+        # zero_state = tf.complex(tf.zeros([batch_size, self._num_units],
+        #                                  dtype=tf.float32),
+        #                         tf.zeros([batch_size, self._num_units],
+        #                                  dtype=tf.float32))
+        bucket = np.sqrt(3.0/self._num_units)
+        # TODO: Test this!!!
+        first_state = tf.complex(tf.random_uniform([batch_size, self._num_units],
+                                 minval=-bucket, maxval=bucket, dtype=dtype),
+                                 tf.random_uniform([batch_size, self._num_units],
+                                 minval=-bucket, maxval=bucket, dtype=dtype))
+        return URNNStateTuple(out, first_state)
+
+    # TODO h0.
 
     def call(self, inputs, state, reuse=False):
         """
