@@ -11,10 +11,6 @@ from tensorflow import random_uniform_initializer as urnd_init
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
 
-### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# TODO: INITIALIZATION !!
-### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 _URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
 
 
@@ -92,8 +88,8 @@ def ref_mul(h, state_size, no, reuse):
         R*h
     """
 
-    # initialization from Hyland. ?
-    scale = np.sqrt(6.0 / (2 + state_size * 2))
+    # Glorot initialization
+    scale = np.sqrt(3.0 / state_size)
 
     with tf.variable_scope("reflection_v_" + str(no), reuse=reuse):
         vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32,
@@ -158,8 +154,10 @@ def matmul_plus_bias(x, output_size, scope, reuse):
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope("linear_" + scope, reuse=reuse):
-        A = tf.get_variable('A', [in_shape[-1], output_size], dtype=tf.float32)
-        b = tf.get_variable('b', [output_size], dtype=tf.float32)
+        A = tf.get_variable('A', [in_shape[-1], output_size], dtype=tf.float32,
+                            initializer=tf.glorot_uniform_initializer())
+        b = tf.get_variable('b', [output_size], dtype=tf.float32,
+                            initializer=tf.constant_initializer(0.0))
     with tf.variable_scope('linear_layer'):
         return tf.matmul(x, A) + b
 
@@ -172,10 +170,14 @@ def complex_matmul_plus_bias(x, output_size, scope, reuse):
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
-        Ar = tf.get_variable('Ar', [in_shape[-1:], output_size], dtype=tf.float32)
-        Ai = tf.get_variable('Ai', [in_shape[-1:], output_size], dtype=tf.float32)
-        br = tf.get_variable('br', [output_size], dtype=tf.float32)
-        bi = tf.get_variable('bi', [output_size], dtype=tf.float32)
+        Ar = tf.get_variable('Ar', [in_shape[-1:], output_size], dtype=tf.float32,
+                             initializer=tf.glorot_uniform_initializer())
+        Ai = tf.get_variable('Ai', [in_shape[-1:], output_size], dtype=tf.float32,
+                             initializer=tf.glorot_uniform_initializer())
+        br = tf.get_variable('br', [output_size], dtype=tf.float32,
+                             initializer=tf.constant_initializer(0.0))
+        bi = tf.get_variable('bi', [output_size], dtype=tf.float32,
+                             initializer=tf.constant_initializer(0.0))
         A = tf.complex(Ar, Ai)
         b = tf.complex(br, bi)
     with tf.variable_scope('complex_linear_layer'):
@@ -216,12 +218,18 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         #                                  dtype=tf.float32),
         #                         tf.zeros([batch_size, self._num_units],
         #                                  dtype=tf.float32))
-        bucket = np.sqrt(3.0/self._num_units)
-        # TODO: Test this!!!
-        first_state = tf.complex(tf.random_uniform([batch_size, self._num_units],
-                                 minval=-bucket, maxval=bucket, dtype=dtype),
-                                 tf.random_uniform([batch_size, self._num_units],
-                                 minval=-bucket, maxval=bucket, dtype=dtype))
+        # bucket = np.sqrt(3.0/self._num_units)
+        # # TODO: Test this!!!
+        # first_state = tf.complex(tf.random_uniform([batch_size, self._num_units],
+        #                          minval=-bucket, maxval=bucket, dtype=dtype),
+        #                          tf.random_uniform([batch_size, self._num_units],
+        #                          minval=-bucket, maxval=bucket, dtype=dtype))
+        omegas = tf.random_uniform([batch_size, self._num_units],
+                                   minval=0, maxval=2*np.pi)
+        sx = tf.cos(omegas)
+        sy = tf.sin(omegas)
+        r = (1.0)/np.sqrt(self._num_units)
+        first_state = tf.complex(r*sx, r*sy)
         return URNNStateTuple(out, first_state)
 
     # TODO h0.
