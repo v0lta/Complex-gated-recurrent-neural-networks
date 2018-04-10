@@ -55,8 +55,6 @@ def mod_relu(z, scope='', reuse=None):
 def phase_relu(z, scope='', reuse=None, is_coupled=False):
     """
         Set up the Phase Relu non-linearity from our paper.
-        a is initialized to two, b to zero, this leads to a network,
-        which is linear during early optimization.
     """
     def step(n):
         """ Elementwise implementation of the Heaviside step."""
@@ -280,7 +278,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 class UnitaryMemoryCell(UnitaryCell):
 
     def __init__(self, num_units, output_size=None, reuse=None):
-        super().__init__(num_units, output_size=None, reuse=None)
+        super().__init__(num_units, output_size=output_size, reuse=reuse)
         self._activation = phase_relu  # cannot be changed for the moment.
 
     """
@@ -315,8 +313,8 @@ class UnitaryMemoryCell(UnitaryCell):
             # By FFT.
             # TODO.
 
-            ht = self._activation(Uh, '', self._reuse, is_coupled=False) \
-                + self._activation(Vx, '', reuse=True, is_coupled=True)
+            zt = Uh + self._activation(Vx, 'input', self._reuse)
+            ht = self._activation(zt, 'forget', self._reuse)
 
             # Mapping the state back onto the real axis.
             # By mapping.

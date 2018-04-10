@@ -45,7 +45,7 @@ n_test = int(1e4)
 n_units = 512
 learning_rate = 1e-3
 batch_size = 50
-GPU = 6
+GPU = 7
 
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
