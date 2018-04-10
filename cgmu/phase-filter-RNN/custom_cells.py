@@ -52,7 +52,7 @@ def mod_relu(z, scope='', reuse=None):
                           rescale * tf.imag(z))
 
 
-def phase_relu(z, scope='', reuse=None):
+def phase_relu(z, scope='', reuse=None, is_coupled=False):
     """
         Set up the Phase Relu non-linearity from our paper.
         a is initialized to two, b to zero, this leads to a network,
@@ -67,6 +67,10 @@ def phase_relu(z, scope='', reuse=None):
                             initializer=urnd_init(1.99, 2.01))
         b = tf.get_variable('b', [], dtype=tf.float32,
                             initializer=urnd_init(-0.01, 0.01))
+        if is_coupled:
+            a = -a
+            b = -b
+
         pi = tf.constant(np.pi)
 
         r = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
@@ -87,15 +91,11 @@ def ref_mul(h, state_size, no, reuse):
     Returns:
         R*h
     """
-
-    # Glorot initialization
-    scale = np.sqrt(3.0 / state_size)
-
     with tf.variable_scope("reflection_v_" + str(no), reuse=reuse):
         vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32,
-                             initializer=urnd_init(-scale, scale))
+                             initializer=tf.glorot_uniform_initializer())
         vi = tf.get_variable('vi', shape=[state_size, 1], dtype=tf.float32,
-                             initializer=urnd_init(-scale, scale))
+                             initializer=tf.glorot_uniform_initializer())
 
     with tf.variable_scope("ref_mul_" + str(no), reuse=reuse):
         v = tf.complex(vr, vi)
@@ -198,7 +198,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, output_size=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
-        self._activation = mod_relu
+        self._activation = phase_relu
         self._output_size = output_size
 
     @property
@@ -263,6 +263,60 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
             # TODO.
             zt = Uh + Vx
             ht = self._activation(zt, '', self._reuse)
+
+            # Mapping the state back onto the real axis.
+            # By mapping.
+
+            output = C_to_R(ht, self.output_size, reuse=self._reuse)
+
+            # By fft.
+            # TODO.
+            # debug_here()
+            # print('dbg')
+            newstate = URNNStateTuple(output, ht)
+        return output, newstate
+
+
+class UnitaryMemoryCell(UnitaryCell):
+
+    def __init__(self, num_units, output_size=None, reuse=None):
+        super().__init__(num_units, output_size=None, reuse=None)
+        self._activation = phase_relu  # cannot be changed for the moment.
+
+    """
+    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
+    """
+
+    def call(self, inputs, state, reuse=False):
+        """
+            Evaluate the RNN cell. Using
+            h_(t+1) = U_t*f(h_t) + V_t x_t
+        """
+        with tf.variable_scope("UnitaryCell"):
+            last_out, last_h = state
+            # Compute the hidden part.
+            step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+            step2 = tf.spectral.fft(step1)
+            step3 = ref_mul(step2, self._num_units, 0, self._reuse)
+            step4 = permutation(step3, self._num_units, 0, self._reuse)
+            step5 = diag_mul(step4, self._num_units, 1, self._reuse)
+            step6 = tf.spectral.ifft(step5)
+            step7 = ref_mul(step6, self._num_units, 1, self._reuse)
+            Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+
+            # Deal with the inputs
+            # Mapping inputs into the complex plane, by folding:
+            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+            Vx = tf.complex(Vxr, Vxi)
+            # By leaving the real part intact.
+            # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
+
+            # By FFT.
+            # TODO.
+
+            ht = self._activation(Uh, '', self._reuse, is_coupled=False) \
+                + self._activation(Vx, '', reuse=True, is_coupled=True)
 
             # Mapping the state back onto the real axis.
             # By mapping.

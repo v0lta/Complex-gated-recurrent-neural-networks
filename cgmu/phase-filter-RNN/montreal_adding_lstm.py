@@ -45,7 +45,7 @@ n_test = int(1e4)
 n_units = 512
 learning_rate = 1e-3
 batch_size = 50
-GPU = 4
+GPU = 6
 
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
@@ -59,7 +59,8 @@ with graph.as_default():
     y = tf.placeholder(tf.float32, shape=(batch_size, 1))
 
     # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=1)
-    cell = cc.UnitaryCell(num_units=n_units, output_size=1)
+    # cell = cc.UnitaryCell(num_units=n_units, output_size=1)
+    cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=1)
     y_hat = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
     y_hat = y_hat[0]  # throw away the final state.
