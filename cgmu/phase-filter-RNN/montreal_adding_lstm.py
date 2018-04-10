@@ -5,6 +5,9 @@ import numpy as np
 import tensorflow as tf
 import custom_cells as cc
 
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
+
 
 def generate_data(time_steps, n_data):
     """
@@ -42,7 +45,7 @@ n_test = int(1e4)
 n_units = 512
 learning_rate = 1e-3
 batch_size = 50
-GPU = 0
+GPU = 4
 
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
@@ -63,9 +66,10 @@ with graph.as_default():
     y_hat = y_hat[:, -1, :]  # only the final output is interesting.
     loss = tf.losses.mean_squared_error(y, y_hat)
     optimizer = tf.train.RMSPropOptimizer(learning_rate)
-    gvs = optimizer.compute_gradients(loss)
-    capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-    train_op = optimizer.apply_gradients(capped_gvs)
+    # gvs = optimizer.compute_gradients(loss)
+    # capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+    # train_op = optimizer.apply_gradients(capped_gvs)
+    train_op = optimizer.minimize(loss)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.scalar('mse', loss)
 
@@ -76,7 +80,8 @@ config = tf.ConfigProto(allow_soft_placement=True,
                         gpu_options=gpu_options)
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = '_' + str(time_steps) + '_' + str(n_train) + '_' + str(n_test) \
-    + '_' + str(n_units) + '_' + str(learning_rate) + str(batch_size)
+    + '_' + str(n_units) + '_' + str(learning_rate) + '_' + str(batch_size) \
+    + '_' + cell._activation.__name__
 summary_writer = tf.summary.FileWriter('cmplx_logs/' + time_str + param_str, graph=graph)
 
 

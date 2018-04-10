@@ -1,3 +1,7 @@
+## log directories.
+cgmu/phase-filter-RNN/logs
+cgmu/phase-filter-RNN/cmplx_logs
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
