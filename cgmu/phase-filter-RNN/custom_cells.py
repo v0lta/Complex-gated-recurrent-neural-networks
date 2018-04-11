@@ -47,7 +47,7 @@ def mod_relu(z, scope='', reuse=None):
         b = tf.get_variable('b', [], dtype=tf.float32,
                             initializer=urnd_init(-0.01, 0.01))
         modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
-        rescale = tf.nn.relu(modulus + b) * (modulus)
+        rescale = tf.nn.relu(modulus + b) / (modulus)
         return tf.complex(rescale * tf.real(z),
                           rescale * tf.imag(z))
 
@@ -115,9 +115,7 @@ def diag_mul(h, state_size, no, reuse):
     Returns:
         R*h
     """
-
     with tf.variable_scope("diag_phis_" + str(no), reuse=reuse):
-        # TODO: Enforce lambda = 1!!
         omega = tf.get_variable('vr', shape=[state_size], dtype=tf.float32,
                                 initializer=urnd_init(-np.pi, np.pi))
         dr = tf.cos(omega)

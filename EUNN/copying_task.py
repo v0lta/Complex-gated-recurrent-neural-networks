@@ -8,6 +8,7 @@ import tensorflow as tf
 
 from EUNN import EUNNCell
 
+
 def copying_data(T, n_data, n_sequence):
     seq = np.random.randint(1, high=9, size=(n_data, n_sequence))
     zeros1 = np.zeros((n_data, T-1))
@@ -17,8 +18,9 @@ def copying_data(T, n_data, n_sequence):
 
     x = np.concatenate((seq, zeros1, marker, zeros3), axis=1).astype('int32')
     y = np.concatenate((zeros3, zeros2, seq), axis=1).astype('int64')
-    
+
     return x, y
+
 
 def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
 
@@ -33,14 +35,10 @@ def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
     n_steps = T+20
     n_classes = 9
 
-
     # --- Create graph and compute gradients ----------------------
     x = tf.placeholder("int32", [None, n_steps])
     y = tf.placeholder("int64", [None, n_steps])
-    
     input_data = tf.one_hot(x, n_input, dtype=tf.float32)
-
-
 
     # --- Input to hidden layer ----------------------
     if model == "LSTM":
@@ -57,7 +55,7 @@ def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
     # --- Hidden Layer to Output ----------------------
     V_init_val = np.sqrt(6.)/np.sqrt(n_output + n_input)
 
-    V_weights = tf.get_variable("V_weights", shape = [n_hidden, n_classes], \
+    V_weights = tf.get_variable("V_weights", shape = [n_hidden, n_classes],
             dtype=tf.float32, initializer=tf.random_uniform_initializer(-V_init_val, V_init_val))
     V_bias = tf.get_variable("V_bias", shape=[n_classes], \
             dtype=tf.float32, initializer=tf.constant_initializer(0.01))

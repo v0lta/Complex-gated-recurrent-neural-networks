@@ -44,6 +44,7 @@ n_train = int(2e6)
 n_test = int(1e4)
 n_units = 512
 learning_rate = 1e-3
+decay = 0.9
 batch_size = 50
 GPU = 7
 
@@ -59,19 +60,19 @@ with graph.as_default():
     y = tf.placeholder(tf.float32, shape=(batch_size, 1))
 
     # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=1)
-    # cell = cc.UnitaryCell(num_units=n_units, output_size=1)
-    cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=1)
+    cell = cc.UnitaryCell(num_units=n_units, output_size=1)
+    # cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=1)
     y_hat = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
     y_hat = y_hat[0]  # throw away the final state.
     y_hat = y_hat[:, -1, :]  # only the final output is interesting.
     loss = tf.losses.mean_squared_error(y, y_hat)
-    optimizer = tf.train.RMSPropOptimizer(learning_rate)
-    with tf.variable_scope("gradient_clipping"):
-        gvs = optimizer.compute_gradients(loss)
-        capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-        train_op = optimizer.apply_gradients(capped_gvs)
-    # train_op = optimizer.minimize(loss)
+    optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
+    # with tf.variable_scope("gradient_clipping"):
+    #     gvs = optimizer.compute_gradients(loss)
+    #     capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+    #     train_op = optimizer.apply_gradients(capped_gvs)
+    train_op = optimizer.minimize(loss)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.scalar('mse', loss)
 
