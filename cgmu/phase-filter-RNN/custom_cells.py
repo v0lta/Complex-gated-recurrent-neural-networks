@@ -60,25 +60,33 @@ def phase_relu(z, scope='', reuse=None, coupled=False):
     """
     def richards(n, k):
         """ Elementwise implementation of the richards-function step.
+            Has non-zero gradient. Not holomorph, but trainable.
         """
-        # return tf.cast(n > 0, tf.float32)  # this is bad grad=0!
-        return tf.nn.sigmoid(k*n)
+        with tf.variable_scope("richards"):
+            return tf.nn.sigmoid(k*n)
+
+    def step(n):
+        return tf.cast(n > 0, tf.float32)  # this is bad grad=0!
 
     with tf.variable_scope('phase_relu' + scope, reuse=reuse):
         a = tf.get_variable('a', [], dtype=tf.float32,
-                            initializer=urnd_init(1.99, 2.01))
+                            initializer=urnd_init(0.49, 0.51))
         b = tf.get_variable('b', [], dtype=tf.float32,
-                            initializer=urnd_init(-0.01, 0.01))
-        k = tf.constant(5.0)
+                            initializer=urnd_init(0.49, 0.51))
+        k = tf.constant(10.0)
+        pi = tf.constant(np.pi)
         if coupled:
             a = -a
             b = -b
-        pi = tf.constant(np.pi)
-        r = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
         theta = tf.atan2(tf.real(z), tf.imag(z))
-        g = richards(tf.sin(theta*a*pi + b*pi)*r, k)
-        return tf.complex(g * tf.real(z),
-                          g * tf.imag(z))
+        # g = step(tf.sin(theta*0.6 + 0.5*pi))
+        g = richards(tf.sin(theta*a + b*pi), k)
+        g = tf.complex(tf.ones_like(g), tf.zeros_like(g))
+        return tf.multiply(g, z)
+
+
+def linear(z, scope='', reuse=None, coupled=False):
+    return z
 
 
 def rfl_mul(h, state_size, no, reuse):
@@ -122,7 +130,7 @@ def rfl_mul(h, state_size, no, reuse):
         new_hr = hr - (2.0 / vstarv) * (a + b)
         new_hi = hi - (2.0 / vstarv) * (d - c)
         new_state = tf.complex(new_hr, new_hi)
-        debug_here()
+
         # v = tf.complex(vr, vi)
         # vstarv = tf.complex(tf.reduce_sum(vr**2 + vi**2), 0.0)
         # # vstarv = tf.matmul(tf.transpose(tf.conj(v)), v)
@@ -222,7 +230,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, output_size=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
-        self._activation = phase_relu
+        self._activation = mod_relu
         self._output_size = output_size
 
     @property

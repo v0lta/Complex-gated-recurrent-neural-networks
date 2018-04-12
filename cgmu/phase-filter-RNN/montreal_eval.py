@@ -55,14 +55,14 @@ time_steps = 100
 n_train = int(2e6)
 n_test = int(1e4)
 n_units = 512
-learning_rate = 1e-3
+learning_rate = 1e-2
 decay = 0.9
-batch_size = 50
+batch_size = 500
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
-GPU = 1
-memory = True
-adding = False
+GPU = 0
+memory = False
+adding = True
 
 if memory:
     output_size = 9
@@ -83,8 +83,8 @@ else:
 graph = tf.Graph()
 with graph.as_default():
     # #### Cell selection. ####
-    # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
-    cell = cc.UnitaryCell(num_units=n_units, output_size=output_size)
+    cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
+    # cell = cc.UnitaryCell(num_units=n_units, output_size=output_size)
     # cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=output_size)
 
     if adding:
@@ -106,13 +106,14 @@ with graph.as_default():
         loss_summary_op = tf.summary.scalar('cross_entropy', loss)
 
     optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
-    with tf.variable_scope("gradient_clipping"):
-        gvs = optimizer.compute_gradients(loss)
-        # capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-        # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
-        train_op = optimizer.apply_gradients(gvs)
+    # with tf.variable_scope("gradient_clipping"):
+    #     gvs = optimizer.compute_gradients(loss)
+    #     # print(gvs)
+    #     capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+    #     # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
+    #     train_op = optimizer.apply_gradients(capped_gvs)
 
-    # train_op = optimizer.minimize(loss)
+    train_op = optimizer.minimize(loss)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
     print("hi")
@@ -131,7 +132,7 @@ param_str = '_' + problem + '_' + str(time_steps) + '_' + str(n_train) \
     + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
     + '_' + str(batch_size) + '_' + cell._activation.__name__ \
     + '_' + cell.__class__.__name__
-summary_writer = tf.summary.FileWriter('cmplx_logs/' + time_str + param_str, graph=graph)
+summary_writer = tf.summary.FileWriter('logs/' + time_str + param_str, graph=graph)
 
 
 # and run it!
