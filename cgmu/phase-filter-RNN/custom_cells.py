@@ -122,7 +122,7 @@ def rfl_mul(h, state_size, no, reuse):
         new_hr = hr - (2.0 / vstarv) * (a + b)
         new_hi = hi - (2.0 / vstarv) * (d - c)
         new_state = tf.complex(new_hr, new_hi)
-
+        debug_here()
         # v = tf.complex(vr, vi)
         # vstarv = tf.complex(tf.reduce_sum(vr**2 + vi**2), 0.0)
         # # vstarv = tf.matmul(tf.transpose(tf.conj(v)), v)
@@ -222,7 +222,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, output_size=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
-        self._activation = mod_relu
+        self._activation = phase_relu
         self._output_size = output_size
 
     @property

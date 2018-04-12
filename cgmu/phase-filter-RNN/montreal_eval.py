@@ -60,7 +60,7 @@ decay = 0.9
 batch_size = 50
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
-GPU = 0
+GPU = 1
 memory = True
 adding = False
 
