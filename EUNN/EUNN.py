@@ -19,16 +19,6 @@ def modrelu(z, b, comp):
        
     return tf.multiply(step3, step2)
 
-def phaserelu(z, b, c, comp):
-    z_norm = tf.sqrt(tf.square(tf.real(z)) + tf.square(tf.imag(z))) + 0.00001
-    
-    step1 = tf.atan2(tf.imag(z), (tf.real(z)) + 0.00001)
-    step2 = tf.sin(step1 * b + c)
-    condition = tf.less(step2,0)
-    small_relu = tf.complex(tf.zeros_like(z_norm), tf.zeros_like(z_norm))
-    large_relu = z
-    
-    return tf.where(condition, small_relu, large_relu)
 
 def _eunn_param(hidden_size, capacity=2, fft=False, comp=True):
     """
@@ -301,7 +291,7 @@ class EUNNCell(RNNCell):
 
     """
 
-    def __init__(self, hidden_size, capacity=2, fft=False, comp=False, activation=phaserelu):
+    def __init__(self, hidden_size, capacity=2, fft=False, comp=False, activation=modrelu):
         super(EUNNCell, self).__init__()
         self._hidden_size = hidden_size
         self._activation = activation

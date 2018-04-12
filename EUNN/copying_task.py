@@ -69,12 +69,9 @@ def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
     correct_pred = tf.equal(tf.argmax(output_data, 2), y)
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-
     # --- Initialization ----------------------
     optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001, decay=0.9).minimize(cost)
     init = tf.global_variables_initializer()
-
-
 
     # --- baseline ----------------------
     baseline = np.log(8) * 10/(T+20)
@@ -82,8 +79,6 @@ def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
 
 
     # --- Training Loop ----------------------
-
-
     config = tf.ConfigProto()
     #config.gpu_options.per_process_gpu_memory_fraction = 0.2
     config.log_device_placement = False
@@ -94,11 +89,7 @@ def main(model, T, n_iter, n_batch, n_hidden, capacity, complex, fft):
 
         train_x, train_y = copying_data(T, n_train, n_sequence)
         test_x, test_y = copying_data(T, n_test, n_sequence)
-
-
-
         sess.run(init)
-
         step = 0
 
         while step < n_iter:
