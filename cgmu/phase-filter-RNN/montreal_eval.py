@@ -55,9 +55,9 @@ time_steps = 100
 n_train = int(2e6)
 n_test = int(1e4)
 n_units = 512
-learning_rate = 1e-2
+learning_rate = 1e-3
 decay = 0.9
-batch_size = 500
+batch_size = 50
 train_iterations = int(n_train/batch_size)
 test_iterations = int(n_test/batch_size)
 GPU = 0
@@ -83,7 +83,7 @@ else:
 graph = tf.Graph()
 with graph.as_default():
     # #### Cell selection. ####
-    cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
+    # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
     # cell = cc.UnitaryCell(num_units=n_units, output_size=output_size)
     # cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=output_size)
 
@@ -116,7 +116,6 @@ with graph.as_default():
     train_op = optimizer.minimize(loss)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
-    print("hi")
 
 gpu_options = tf.GPUOptions(visible_device_list=str(GPU))
 # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0)
@@ -133,7 +132,7 @@ param_str = '_' + problem + '_' + str(time_steps) + '_' + str(n_train) \
     + '_' + str(batch_size) + '_' + cell._activation.__name__ \
     + '_' + cell.__class__.__name__
 summary_writer = tf.summary.FileWriter('logs/' + time_str + param_str, graph=graph)
-
+print(param_str)
 
 # and run it!
 train_plot = []

@@ -56,7 +56,6 @@ def mod_relu(z, scope='', reuse=None):
 def phase_relu(z, scope='', reuse=None, coupled=False):
     """
         Set up the Phase Relu non-linearity from our paper.
-        TODO: Register gradient?
     """
     def richards(n, k):
         """ Elementwise implementation of the richards-function step.
@@ -230,7 +229,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, output_size=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
-        self._activation = mod_relu
+        self._activation = phase_relu
         self._output_size = output_size
 
     @property
@@ -310,14 +309,26 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
 
 class UnitaryMemoryCell(UnitaryCell):
-
-    def __init__(self, num_units, output_size=None, reuse=None):
-        super().__init__(num_units, output_size=output_size, reuse=reuse)
-        self._activation = phase_relu  # cannot be changed for the moment.
-
     """
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
+
+    def __init__(self, num_units, output_size=None, reuse=None):
+        super().__init__(num_units, output_size=output_size, reuse=reuse)
+        self._temporal_activation = mod_relu  # FIXME: beat linear.
+        self._output_activation = None  # TODO.
+
+    def complex_memory_gate(self, h, x, scope, reuse):
+        """
+        Produce a bounded gate output mapping from C to
+        R. This operation breaks complex gradients, but
+        Wirtinger Caclulus may be used to justify the
+        gradients used here as approximately correct.
+        """
+        hr = C_to_R(h)
+        xr = C_to_R(x)
+        with tf.variable_scope('scope', reuse):
+            return tf.nn.sigmoid(hr + xr)
 
     def call(self, inputs, state, reuse=False):
         """
@@ -327,9 +338,8 @@ class UnitaryMemoryCell(UnitaryCell):
         with tf.variable_scope("UnitaryMemoryCell"):
 
             last_out, last_h = state
-            fh = self._activation(last_h, '', reuse=self._reuse)
             # Compute the hidden part.
-            step1 = diag_mul(fh, self._num_units, 0, self._reuse)
+            step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
             step2 = tf.spectral.fft(step1)
             step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
             step4 = permutation(step3, self._num_units, 0, self._reuse)
@@ -345,17 +355,22 @@ class UnitaryMemoryCell(UnitaryCell):
             Vx = tf.complex(Vxr, Vxi)
             # By leaving the real part intact.
             # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
-
             # By FFT.
             # TODO.
-            ht = Uh + self._activation(Vx, '', reuse=True, coupled=True)
+            # By Hilbert transform.
+            # TODO.
+
+            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse)
+            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse)
+            pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
+            ht = self._temporal_activation(pre_h)
 
             # Mapping the state back onto the real axis.
             # By mapping.
             output = C_to_R(ht, self.output_size, reuse=self._reuse)
             # ht = self._activation(ht, '', reuse=True, coupled=True)
 
-            # By fft.
+            # By ifft.
             # TODO.
             # debug_here()
             # print('dbg')
