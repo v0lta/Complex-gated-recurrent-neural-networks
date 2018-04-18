@@ -216,8 +216,8 @@ def complex_matmul_plus_bias(x, output_size, scope, reuse):
         return tf.matmul(x, A) + b
 
 
-def C_to_R(h, output_size, reuse):
-    with tf.variable_scope("C_to_R"):
+def C_to_R(h, output_size, reuse, scope=None):
+    with tf.variable_scope(scope or "C_to_R"):
         concat = tf.concat([tf.real(h), tf.imag(h)], axis=-1)
         return matmul_plus_bias(concat, output_size, 'final', reuse)
 
@@ -226,10 +226,10 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     """
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
-    def __init__(self, num_units, output_size=None, reuse=None):
+    def __init__(self, num_units, activation=mod_relu, output_size=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
-        self._activation = phase_relu
+        self._activation = activation
         self._output_size = output_size
 
     @property
@@ -313,9 +313,9 @@ class UnitaryMemoryCell(UnitaryCell):
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
 
-    def __init__(self, num_units, output_size=None, reuse=None):
+    def __init__(self, num_units, activation=mod_relu, output_size=None, reuse=None):
         super().__init__(num_units, output_size=output_size, reuse=reuse)
-        self._temporal_activation = mod_relu  # FIXME: beat linear.
+        self._temporal_activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
 
     def complex_memory_gate(self, h, x, scope, reuse):
@@ -325,10 +325,11 @@ class UnitaryMemoryCell(UnitaryCell):
         Wirtinger Caclulus may be used to justify the
         gradients used here as approximately correct.
         """
-        hr = C_to_R(h)
-        xr = C_to_R(x)
-        with tf.variable_scope('scope', reuse):
-            return tf.nn.sigmoid(hr + xr)
+        with tf.variable_scope(scope, reuse):
+            hr = C_to_R(h, self._num_units, reuse, scope='C_to_R_h')
+            xr = C_to_R(x, self._num_units, reuse, scope='C_to_R_x')
+            scale = tf.nn.sigmoid(hr + xr)
+            return tf.complex(scale, tf.zeros_like(scale))
 
     def call(self, inputs, state, reuse=False):
         """
