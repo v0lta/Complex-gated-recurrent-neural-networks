@@ -55,7 +55,8 @@ def generate_data_memory(time_steps, n_data, n_sequence):
 def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
          n_units=512, learning_rate=1e-3, decay=0.9,
          batch_size=50, GPU=0, memory=False, adding=True,
-         cell_fun=tf.contrib.rnn.LSTMCell):
+         cell_fun=tf.contrib.rnn.LSTMCell, subfolder='exp1',
+         gpu_mem_frac=1.0):
     """
     This main function does all the experimentation.
     """
@@ -82,8 +83,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
     with graph.as_default():
         # #### Cell selection. ####
         # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
-        cell = cell_fun(num_units=n_units, output_size=output_size)
-        # cell = cc.UnitaryMemoryCell(num_units=n_units, output_size=output_size)
+        cell = cell_fun(num_units=n_units, num_proj=output_size)
+        # cell = cc.UnitaryMemoryCell(num_units=n_units, num_proj=output_size)
 
         if adding:
             x = tf.placeholder(tf.float32, shape=(batch_size, time_steps, 2))
@@ -115,7 +116,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         init_op = tf.global_variables_initializer()
         summary_op = tf.summary.merge_all()
 
-    gpu_options = tf.GPUOptions(visible_device_list=str(GPU))
+    gpu_options = tf.GPUOptions(visible_device_list=str(GPU),
+                                per_process_gpu_memory_fraction=gpu_mem_frac)
     # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0)
     config = tf.ConfigProto(allow_soft_placement=True,
                             log_device_placement=False,
@@ -129,7 +131,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
         + '_' + str(batch_size) + '_' + cell._activation.__name__ \
         + '_' + cell.__class__.__name__
-    summary_writer = tf.summary.FileWriter('logs/' + time_str + param_str, graph=graph)
+    summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
+                                           + param_str, graph=graph)
     print(param_str)
 
     # and run it!
@@ -174,26 +177,39 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
 
 
 if __name__ == "__main__":
+    # time_steps=100, n_train=int(2e6), n_test=int(1e4),
+    # n_units=512, learning_rate=1e-3, decay=0.9,
+    # batch_size=50, GPU=0, memory=False, adding=True,
+    # cell_fun=tf.contrib.rnn.LSTMCell
     parser = argparse.ArgumentParser(
         description="Run the montreal implementation \
          of the hochreiter RNN evaluation metrics.")
     parser.add_argument("--model", default='EUNN',
-                        help='Model name: LSTM, EUNN')
-    parser.add_argument('--T', '-T', type=int, default=100,
+                        help='Model name: LSTM, UNN, GUNN')
+    parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
                         help='Copying Problem delay')
-    parser.add_argument('--n_iter', '-I', type=int, default=200,
+    parser.add_argument('--n_train', '-n_train', type=int, default=int(2e6),
                         help='training iteration number')
-    parser.add_argument('--n_batch', '-B', type=int, default=128,
-                        help='batch size')
-    parser.add_argument('--n_hidden', '-H', type=int, default=128,
+    parser.add_argument('--n_test', '-n_test', type=int, default=int(1e4),
+                        help='training iteration number')
+    parser.add_argument('--n_units', '-n_units', type=int, default=512,
                         help='hidden layer size')
-    parser.add_argument('--capacity', '-L', type=int, default=2,
-                        help='Tunable style capacity, default value is 2')
-    parser.add_argument('--complex', '-C', type=str, default="True",
-                        help='Complex domain or Real domain. \
-                              Default is True: complex domain')
-    parser.add_argument('--fft', '-F', type=str, default="False",
-                        help='fft style, only for EUNN, default is False: tunable style')
+    parser.add_argument('--learning_rate', '-learning_rate', type=float, default=1e-3,
+                        help='graident descent step size')
+    parser.add_argument('--decay', '-decay', type=int, default=0.9,
+                        help='learning rate decay')
+    parser.add_argument('--batch_size', '-batch_size', type=int, default=50,
+                        help='Number of batches to be processed in parallel.')
+    parser.add_argument('--GPU', '-GPU', type=int, default=0,
+                        help='the number of the desired GPU.')
+    parser.add_argument('--gpu_mem_frac', '-gpu_mem_frac', type=float, default=1.0,
+                        help='Specify a gpu_mem_frac to use.')
+    parser.add_argument('--memory', '-memory', type=str, default=False,
+                        help='If true the data will come from the memory problem.')
+    parser.add_argument('--adding', '-adding', type=str, default=True,
+                        help='If true the data will come from the adding problem.')
+    parser.add_argument('--subfolder', '-subfolder', type=str, default='exp1',
+                        help='Specify a subfolder to use.')
 
     args = parser.parse_args()
     dict = vars(args)
@@ -204,14 +220,25 @@ if __name__ == "__main__":
             dict[i] = False
         elif dict[i] == "True":
             dict[i] = True
+        elif dict[i] == "LSTM":
+            dict[i] = tf.contrib.rnn.LSTMCell
+        elif dict[i] == "UNN":
+            dict[i] = cc.UnitaryCell
+        elif dict[i] == "GUNN":
+            dict[i] = cc.UnitaryMemoryCell
 
-    kwargs = {'model': dict['model'],
-              'T': dict['T'],
-              'n_iter': dict['n_iter'],
-              'n_batch': dict['n_batch'],
-              'n_hidden': dict['n_hidden'],
-              'capacity': dict['capacity'],
-              'complex': dict['complex'],
-              'fft': dict['fft']}
+    kwargs = {'cell_fun': dict['model'],
+              'time_steps': dict['time_steps'],
+              'n_train': dict['n_train'],
+              'n_test': dict['n_test'],
+              'n_units': dict['n_units'],
+              'learning_rate': dict['learning_rate'],
+              'decay': dict['decay'],
+              'batch_size': dict['batch_size'],
+              'gpu_mem_frac': dict['gpu_mem_frac'],
+              'GPU': dict['GPU'],
+              'memory': dict['memory'],
+              'adding': dict['adding'],
+              'subfolder': dict['subfolder']}
 
     main(**kwargs)

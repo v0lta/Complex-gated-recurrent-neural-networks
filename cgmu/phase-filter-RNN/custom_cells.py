@@ -178,7 +178,7 @@ def permutation(h, state_size, no, reuse):
     return tf.matmul(h, P)
 
 
-def matmul_plus_bias(x, output_size, scope, reuse):
+def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     """
     Compute Ax + b.
     Input: x
@@ -186,15 +186,17 @@ def matmul_plus_bias(x, output_size, scope, reuse):
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope("linear_" + scope, reuse=reuse):
-        A = tf.get_variable('A', [in_shape[-1], output_size], dtype=tf.float32,
+        A = tf.get_variable('A', [in_shape[-1], num_proj], dtype=tf.float32,
                             initializer=tf.glorot_uniform_initializer())
-        b = tf.get_variable('b', [output_size], dtype=tf.float32,
-                            initializer=tf.constant_initializer(0.0))
+        b = tf.get_variable('b', [num_proj], dtype=tf.float32,
+                            initializer=tf.constant_initializer(bias_init))
+        print('Initializing', tf.contrib.framework.get_name_scope(), 'b to',
+              bias_init)
     with tf.variable_scope('linear_layer'):
         return tf.matmul(x, A) + b
 
 
-def complex_matmul_plus_bias(x, output_size, scope, reuse):
+def complex_matmul_plus_bias(x, num_proj, scope, reuse):
     """
     Compute Ax + b.
     Input: x
@@ -202,13 +204,13 @@ def complex_matmul_plus_bias(x, output_size, scope, reuse):
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
-        Ar = tf.get_variable('Ar', [in_shape[-1:], output_size], dtype=tf.float32,
+        Ar = tf.get_variable('Ar', [in_shape[-1:], num_proj], dtype=tf.float32,
                              initializer=tf.glorot_uniform_initializer())
-        Ai = tf.get_variable('Ai', [in_shape[-1:], output_size], dtype=tf.float32,
+        Ai = tf.get_variable('Ai', [in_shape[-1:], num_proj], dtype=tf.float32,
                              initializer=tf.glorot_uniform_initializer())
-        br = tf.get_variable('br', [output_size], dtype=tf.float32,
+        br = tf.get_variable('br', [num_proj], dtype=tf.float32,
                              initializer=tf.constant_initializer(0.0))
-        bi = tf.get_variable('bi', [output_size], dtype=tf.float32,
+        bi = tf.get_variable('bi', [num_proj], dtype=tf.float32,
                              initializer=tf.constant_initializer(0.0))
         A = tf.complex(Ar, Ai)
         b = tf.complex(br, bi)
@@ -216,21 +218,21 @@ def complex_matmul_plus_bias(x, output_size, scope, reuse):
         return tf.matmul(x, A) + b
 
 
-def C_to_R(h, output_size, reuse, scope=None):
+def C_to_R(h, num_proj, reuse, scope=None, bias_init=0.0):
     with tf.variable_scope(scope or "C_to_R"):
         concat = tf.concat([tf.real(h), tf.imag(h)], axis=-1)
-        return matmul_plus_bias(concat, output_size, 'final', reuse)
+        return matmul_plus_bias(concat, num_proj, 'final', reuse, bias_init)
 
 
 class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     """
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
-    def __init__(self, num_units, activation=mod_relu, output_size=None, reuse=None):
+    def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
-        self._output_size = output_size
+        self._output_size = num_proj
 
     @property
     def state_size(self):
@@ -298,7 +300,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
             # Mapping the state back onto the real axis.
             # By mapping.
 
-            output = C_to_R(ht, self.output_size, reuse=self._reuse)
+            output = C_to_R(ht, self._output_size, reuse=self._reuse)
 
             # By fft.
             # TODO.
@@ -313,12 +315,12 @@ class UnitaryMemoryCell(UnitaryCell):
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
 
-    def __init__(self, num_units, activation=mod_relu, output_size=None, reuse=None):
-        super().__init__(num_units, output_size=output_size, reuse=reuse)
+    def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None):
+        super().__init__(num_units, num_proj=num_proj, reuse=reuse)
         self._temporal_activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
 
-    def complex_memory_gate(self, h, x, scope, reuse):
+    def complex_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
         """
         Produce a bounded gate output mapping from C to
         R. This operation breaks complex gradients, but
@@ -326,8 +328,8 @@ class UnitaryMemoryCell(UnitaryCell):
         gradients used here as approximately correct.
         """
         with tf.variable_scope(scope, reuse):
-            hr = C_to_R(h, self._num_units, reuse, scope='C_to_R_h')
-            xr = C_to_R(x, self._num_units, reuse, scope='C_to_R_x')
+            hr = C_to_R(h, self._num_units, reuse, scope='C_to_R_h', bias_init=bias_init)
+            xr = C_to_R(x, self._num_units, reuse, scope='C_to_R_x', bias_init=bias_init)
             scale = tf.nn.sigmoid(hr + xr)
             return tf.complex(scale, tf.zeros_like(scale))
 
@@ -361,14 +363,14 @@ class UnitaryMemoryCell(UnitaryCell):
             # By Hilbert transform.
             # TODO.
 
-            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse)
-            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse)
+            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse, bias_init=5.0)
+            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse, bias_init=5.0)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
             ht = self._temporal_activation(pre_h)
 
             # Mapping the state back onto the real axis.
             # By mapping.
-            output = C_to_R(ht, self.output_size, reuse=self._reuse)
+            output = C_to_R(ht, self._output_size, reuse=self._reuse)
             # ht = self._activation(ht, '', reuse=True, coupled=True)
 
             # By ifft.
