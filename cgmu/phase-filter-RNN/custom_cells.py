@@ -84,6 +84,16 @@ def phase_relu(z, scope='', reuse=None, coupled=False):
         return tf.multiply(g, z)
 
 
+def hirose(z, scope='', reuse=None):
+    """
+    Compute the non-linearity proposed by Hirose.
+    """
+    modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
+    rescale = 2*tf.complex(tf.nn.tanh(modulus)/modulus,
+                           tf.zeros_like(modulus))
+    return tf.multiply(rescale, z)
+
+
 def linear(z, scope='', reuse=None, coupled=False):
     return z
 
@@ -363,8 +373,8 @@ class UnitaryMemoryCell(UnitaryCell):
             # By Hilbert transform.
             # TODO.
 
-            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse, bias_init=5.0)
-            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse, bias_init=5.0)
+            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse, bias_init=1.0)
+            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse, bias_init=1.0)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
             ht = self._temporal_activation(pre_h)
 

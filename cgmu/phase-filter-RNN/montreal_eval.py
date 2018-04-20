@@ -188,7 +188,7 @@ if __name__ == "__main__":
                         help='Model name: LSTM, UNN, GUNN')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
                         help='Copying Problem delay')
-    parser.add_argument('--n_train', '-n_train', type=int, default=int(2e6),
+    parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
                         help='training iteration number')
     parser.add_argument('--n_test', '-n_test', type=int, default=int(1e4),
                         help='training iteration number')
@@ -241,4 +241,5 @@ if __name__ == "__main__":
               'adding': dict['adding'],
               'subfolder': dict['subfolder']}
 
+    # TODO: run multiple times for different sequence lengths.
     main(**kwargs)
