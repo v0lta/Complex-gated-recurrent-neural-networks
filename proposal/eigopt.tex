@@ -10,7 +10,7 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{standalone}
 
-\title{Adaptive phase filter Networks}
+\title{Complex gated memory cells.}
 \author{Moritz Wolter  \\
     Uni Bonn  \\
     \and 
@@ -23,21 +23,18 @@
 % before or after the \begin{document} command 
 % BUT the \maketitle command MUST come AFTER the \begin{document} command! 
 \begin{document}
-
-
 \tableofcontents
 \newpage
 \maketitle
 \begin{abstract}
-RNN optimization often suffers from numberically unstable gradients. We propose a novel complex RNN architecture, which can be shown to be numerically stable. Building on top of recent sucesses in the optimization of complex valued neural networks we propose a novel non-linearity the adaptive phase Relu, which allows us to take gated recurrent units to the complex domain. In short we optimize: 
+RNN optimization often suffers from numberically unstable gradients. We propose a novel complex RNN architecture, which can be shown to be numerically stable. Building on top of recent sucesses in the optimization of complex valued neural networks we propose a novel memory cell, which allows us to take gated recurrent units to the complex domain. In short we optimize: 
 \begin{align}
 \min_{\mathbf{W}} \text{cost}(\{\mathbf{x}\}, \{\mathbf{W}\}) \\
 \text{such that } \forall m \; \| \phi_m \| = 1, \\
                   \forall n \; \| f'(h_n) \| \leq 1.
 \end{align}
 Where $\{\mathbf{W}\}$ denotes the set of network weights $\{\mathbf{x}\}$ the set of network inputs and $\{\phi_m\}$ the set of all weight matrix eigenvalues and finally $\|f'(h_n) \|$ the hidden actication derivatives.
-We show that our adaptive phase Relu is practically holomorph and overcomes limitations on skalar activations set by Liouville's theorem.
-It turns out that we do not need to work with a constrained optimization algorithm here, but can instead rewrite the problem in an unconstrained way, and use libraries optimized for large scale unconstrained optimization such as tensorflow or pytorch.
+We show that our complex gated memory cells are practically stable and use wirtinger calculus to overcome limitations on skalar activations set by Liouville's theorem. It turns out that we do not need to work with a constrained optimization algorithm here, but can instead rewrite the problem in an unconstrained way, and use libraries optimized for large scale unconstrained optimization such as tensorflow or pytorch.
 \end{abstract}
 
 \section{Introduction}
@@ -45,19 +42,25 @@ The training process of artificial neural networks is not necessarily stable. Un
 
 \section{Related work}
 Normalized complex matrices where first introduced into the literature by \cite{Arjovsky}. Since then \cite{Wisdom}, expanded the reach of the unitary matrix basis. An idea that is taken further by \cite{Hyland}, which makes use Lie group theory.  
-Even tough a holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduces a novel non-linearity which is not complex-differentiable. \cite{Trabelsi} compares complex non-linearities and systematically measures performance. Furthermore complex batch-normalization is introduced.
-Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. 
+A holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduces a novel non-linearity which is not complex-differentiable. \cite{Trabelsi} compares complex non-linearities and systematically measures performance. Furthermore complex batch-normalization is introduced.
+Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. \\
+Finding a gradient for functions from $\mathbb{C}$ to $\mathbb{R}$, is a problem which has been adressed in the digital signal processing literature. Where complex problems with real cost functions had to be solved \cite{Brandwood}\cite{Bos}\cite{Franken}\cite{Delgado}. Applications to neural network cost functions where considered later \cite{Mandic}. All solutions essentially utilize Wirtinger calculus \cite{Wirtinger}, to come up with an approximate gradient for a non-holomorph function.
 
 \section{Complex Unitary Memory cells}
-Idea: Come up with a complex gating mechanism. \\
-Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
-Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore not an ideal solution. \\
-Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
+Setting up complex gating mechanisms is no trivial task, because functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
+Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore hard to implement, because there is no obvious complex gradient to train these gates.
 
-
+\begin{figure}
+\centering
+%\includestandalone[width=0.45\linewidth]{./img/cgmu/adding_problem}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem.pdf}
+%\includestandalone[width=0.45\linewidth]{./img/cgmu/memory_problem}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem.pdf}
+\caption{Performance of the complex gated memory unit (cgmu, ours), the unitary neural network (unn, \cite{Arjovsky}), and long short term memory (lstm, \cite{Hochreiter}).}
+\end{figure}
 
 \subsection{Proof of stability}
-TODO: Modify the proof from \cite{Arjovsky} to work with our cell.
+TODO: Modify the proof from \cite{Arjovsky} and \cite{Hochreiter} to work with our cell.
 
 \subsection{Results}
 TODO: Implement and measure performance.
@@ -79,9 +82,6 @@ Some first numerical evidence suggests that fourier rotation matrices are unitar
 Motivation: Current dynamic RNNs do not worry about stability. \\
 Idea: Adapt RNN stability theory to come up with stable dynamic RNNs. \\
 Extra motivation: I think that the steerable filter paper \cite{Freeman} was the basis for the original dynamic filter paper. Which is why I think the fourier extension of this paper \cite{Michaelis} could hold some cues for a nice extension. In particular, because outside of the vision domain, \cite{Hyland} has already shown that this is an interesting idea. 
-
-\subsection{Deep Phase-Filter ConvNets}
-TODO. Linlin?
 
 \section{Background}
 
