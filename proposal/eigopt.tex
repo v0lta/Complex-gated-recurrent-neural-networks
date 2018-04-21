@@ -48,7 +48,44 @@ Normalized complex matrices where first introduced into the literature by \cite{
 Even tough a holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduces a novel non-linearity which is not complex-differentiable. \cite{Trabelsi} compares complex non-linearities and systematically measures performance. Furthermore complex batch-normalization is introduced.
 Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. 
 
-\section{Phase-Relus}
+\section{Complex Unitary Memory cells}
+Idea: Come up with a complex gating mechanism. \\
+Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
+Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore not an ideal solution. \\
+Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
+
+
+
+\subsection{Proof of stability}
+TODO: Modify the proof from \cite{Arjovsky} to work with our cell.
+
+\subsection{Results}
+TODO: Implement and measure performance.
+
+\section{Other Ideas}
+\subsection{Fourier Space rotations.}
+Earlier work has found that rotations can be implemented in the frequency domain by shearing along 
+the two dimensions. Making use of the DFTs shift theorem \cite[page 173]{Briggs}:\footnote{\url{http://www.nontrivialzeros.net/KGL_Papers/27_Rotation_Paper_1997_qualityscan_OCR.pdf}}
+\footnote{\url{http://bigwww.epfl.ch/publications/unser9502.pdf}}
+\begin{align}
+\mathcal{D}(f_{m + m_0, n + n_0}) = \omega_M^{-m_0j}\omega_N^{-n_0k}F_{jk} \\
+\text{with } \omega_N^{nk} = e^{i2\pi nk/N}
+\end{align}
+Transformation to the frequency domain multiplication, rotation and inverse transformation, can be implemented using three matrix multiplications, when working with the DFT or as FFT, multiplication and ifft. The inverse transformation is a way to implicitly apply trigonometric interpolation\footnote{\url{https://en.wikipedia.org/wiki/Trigonometric_interpolation}}. Which takes care of interpolating the pixel values of the new rotated image.
+
+Some first numerical evidence suggests that fourier rotation matrices are unitary. This could allow us to prove stability. TODO: Proof?
+
+\subsection{Unitary dynamic filter networks}
+Motivation: Current dynamic RNNs do not worry about stability. \\
+Idea: Adapt RNN stability theory to come up with stable dynamic RNNs. \\
+Extra motivation: I think that the steerable filter paper \cite{Freeman} was the basis for the original dynamic filter paper. Which is why I think the fourier extension of this paper \cite{Michaelis} could hold some cues for a nice extension. In particular, because outside of the vision domain, \cite{Hyland} has already shown that this is an interesting idea. 
+
+\subsection{Deep Phase-Filter ConvNets}
+TODO. Linlin?
+
+\section{Background}
+
+\subsection{Phase-Relus}
 Holomorph functions $f(x,y) = u(x,y) + iv(x,y)$ must satisfy the Cauchy-Riemann equations:
 \begin{align}
 \frac{\partial u}{\partial x} = \frac{\partial u}{\partial y} \; \text{and} \; \frac{\partial u}{\partial y} = -\frac{\partial v}{\partial x}  
@@ -92,73 +129,9 @@ An interesting variant of this approach can be created by adding a cosine term t
 \begin{align}
 g(r,\theta,a,b,c,d) = r \text{H}(\sin (\theta \cdot a\pi + b))\text{H}(\cos (\theta \cdot c\pi + d))
 \end{align}
-This will kill any incoming complex number with a phase angle of either zero sine or cosine. The above equation can be considered a generalization of the zRelu from \cite{Guberman}\cite{Trabelsi}. Its is equivalent for $a=1, b=0, c=1, d=0$ because both cosine and sine are positive in the first quadrant. However our approach allows learning the filter regions, while approximately conserving holomorphy. We do not explicitly repeat the proof here, but hope that reads will trust us when we argue that the added cosine leads to one more term with a Dirac-pulse for which identical arguments hold. \\
-In the future filters based on other trigonometric functions could also be considered. \\
+This will kill any incoming complex number with a phase angle of either zero sine or cosine. The above equation can be considered a generalization of the zRelu from \cite{Guberman}\cite{Trabelsi}. Its is equivalent for $a=1, b=0, c=1, d=0$ because both cosine and sine are positive in the first quadrant. This approach works when choosing the function parameters manually. Unfortunately, the same mechanics, that makes this approach approximately holomorph also kills the derivative, which one would want to use to train the function parameters.  \\
 
-These non-linearities require two function calls per block, one evaluation of the sine function, plus the call to the Heaviside-step, if the complex numbers are stored in polar-Form. In this case it would be comparable to $\text{zRelu}(z) = \text{relu}(x) + i\text{relu}(y)$. If for some reason number storage in polar form is impossible and Cartesian coordinates are used we must compute $\phi = \text{atan2}(y/x)$.
-In this case we can reformulate our non-linearity in terms of $z = x + iy$:
-\begin{align}
-f(x + iy, a, b) = \text{H}(\sin(\text{atan2}(x,y)\cdot a\pi + b))(x + iy)
-\end{align}
-Similar non-linearities such as the cRelu also require computation of the arcus-tangent function. While the cRelu proceeds by checking the angle directly using an if statement, we have to evaluate an additional sine function, making our approach sightly more expensive.
-
-\section{Complex Unitary Memory cells}
-Idea: Come up with a complex gating mechanism. \\
-Problem: Functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
-Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore not an ideal solution. \\
-Question: Is there a way to implement holomporph (complex differentiable) memory management that is not based on scalar multiplication? \\
-Solution: Can complex domain value deletion be implemented by rotating data points into the "dead" part of a phase-relu? Or alternatively implement forgetting by rotating and scaling the phase-relu's filter, to move the dead part where we would like to forget values? This would amount to learning $a,b$ from equation~\ref{eq:PhaseRelu}, and leave unfiltered data points untouched.
-Intuitively this non-linearity amounts to learning which parts of the complex plane the non-linearity should preserve for $a=1, b=0$ this will be the upper half plane. \\
-Equations:
-Re-considering the memory cell from \cite{Pascanu} and \cite{Arjovsky}:
-\begin{align}
-\mathbf{h}_{t+1} = \mathbf{W}_{r}\sigma(h_{t-1}) + \mathbf{W}_{i} \mathbf{u}_t + \mathbf{b}\end{align}
-\cite{Arjovsky} chooses sigma to be the modRelu (see section~\ref{sec:modRelu}). We expand their model and define:
-\begin{align}
-\mathbf{h}_{t+1} = \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,c,d) + \mathbf{b}
-\end{align}
-With $f(z, a, b)$ defined as our novel Phase-Relu serving as forget gate and $f(z, c, d)$ being another Phase-Relu working as input gate. Since our non-linearity is based on an odd sine wave we have $-\sin(\theta a \pi + b) = \sin(-\theta a \pi - b)$. Gate coupling can therefore be achieved by setting $c = -a$ as well as $d = - b$, this choice ensures that values which are deleted by the forget-gate will be replaced by the input gate.
-\begin{figure}
-\includestandalone{image-code/gate_sine_step}
-\includegraphics[scale=0.45]{image-code/gate_polar}
-\caption{Plots illustrating our gating mechanics, the functions $\text{H}(\sin(\theta a\pi + b\pi))$ as well as $\text{H}(\sin(\theta -a\pi - b\pi))$ are shown. In the polar plot the underlying sine-wave $|\sin(\theta a\pi + b\pi)|$ is included in blue.}
-\end{figure}
-Last but not least we can interpret the parameters $a, b$ as $p = a + ib$. And use a complex neural network $\gamma$, to compute $\gamma([\mathbf{h}_{t-1}, \mathbf{u}_t]) = a + ib.$, which makes our gates responsive to input and memory.
-We finally define our complex unitary memory unit (CUMU) as:
-\begin{align}
-(a + ib) &= \gamma([\mathbf{u_t}, \mathbf{h_{t-1}}]) \\
-\mathbf{h}_{t+1} &= \mathbf{W}_{r}f(\mathbf{h}_{t-1}, a, b) + \mathbf{W}_{i} f(\mathbf{u}_t,-a,-b) + \mathbf{b}
-\end{align}
-
-\subsection{Proof of stability}
-TODO: Modify the proof from \cite{Arjovsky} to work with our cell.
-
-\subsection{Results}
-TODO: Implement and measure performance.
-
-\section{Other Ideas}
-\subsection{Fourier Space rotations.}
-Earlier work has found that rotations can be implemented in the frequency domain by shearing along 
-the two dimensions. Making use of the DFTs shift theorem \cite[page 173]{Briggs}:\footnote{\url{http://www.nontrivialzeros.net/KGL_Papers/27_Rotation_Paper_1997_qualityscan_OCR.pdf}}
-\footnote{\url{http://bigwww.epfl.ch/publications/unser9502.pdf}}
-\begin{align}
-\mathcal{D}(f_{m + m_0, n + n_0}) = \omega_M^{-m_0j}\omega_N^{-n_0k}F_{jk} \\
-\text{with } \omega_N^{nk} = e^{i2\pi nk/N}
-\end{align}
-Transformation to the frequency domain multiplication, rotation and inverse transformation, can be implemented using three matrix multiplications, when working with the DFT or as FFT, multiplication and ifft. The inverse transformation is a way to implicitly apply trigonometric interpolation\footnote{\url{https://en.wikipedia.org/wiki/Trigonometric_interpolation}}. Which takes care of interpolating the pixel values of the new rotated image.
-
-Some first numerical evidence suggests that fourier rotation matrices are unitary. This could allow us to prove stability. TODO: Proof?
-
-\subsection{Unitary dynamic filter networks}
-Motivation: Current dynamic RNNs do not worry about stability. \\
-Idea: Adapt RNN stability theory to come up with stable dynamic RNNs. \\
-Extra motivation: I think that the steerable filter paper \cite{Freeman} was the basis for the original dynamic filter paper. Which is why I think the fourier extension of this paper \cite{Michaelis} could hold some cues for a nice extension. In particular, because outside of the vision domain, \cite{Hyland} has already shown that this is an interesting idea. 
-
-\subsection{Deep Phase-Filter ConvNets}
-TODO. Linlin?
-
-\section{Background}
-\subsection{Phase-Relu approximate stability proof in Cartesian coordinates.}
+\subsubsection{Phase-Relu approximate stability proof in Cartesian coordinates.}
 \label{sec:CarthesianPhaseRelu}
 We have shown that 
 \begin{align}

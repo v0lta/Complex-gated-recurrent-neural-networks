@@ -6,6 +6,11 @@ import tensorflow as tf
 import argparse
 import custom_cells as cc
 
+from custom_cells import mod_relu
+from custom_cells import hirose
+from custom_cells import linear
+from custom_cells import moebius
+
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
 
@@ -55,8 +60,8 @@ def generate_data_memory(time_steps, n_data, n_sequence):
 def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
          n_units=512, learning_rate=1e-3, decay=0.9,
          batch_size=50, GPU=0, memory=False, adding=True,
-         cell_fun=tf.contrib.rnn.LSTMCell, subfolder='exp1',
-         gpu_mem_frac=1.0):
+         cell_fun=tf.contrib.rnn.LSTMCell, activation=mod_relu,
+         subfolder='exp1', gpu_mem_frac=1.0):
     """
     This main function does all the experimentation.
     """
@@ -82,9 +87,11 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
     graph = tf.Graph()
     with graph.as_default():
         # #### Cell selection. ####
-        # cell = tf.contrib.rnn.LSTMCell(n_units, num_proj=output_size)
-        cell = cell_fun(num_units=n_units, num_proj=output_size)
-        # cell = cc.UnitaryMemoryCell(num_units=n_units, num_proj=output_size)
+        if cell_fun.__name__ == 'LSTMCell':
+            cell = cell_fun(num_units=n_units, num_proj=output_size)
+        else:
+            cell = cell_fun(num_units=n_units, num_proj=output_size,
+                            activation=activation)
 
         if adding:
             x = tf.placeholder(tf.float32, shape=(batch_size, time_steps, 2))
@@ -210,10 +217,13 @@ if __name__ == "__main__":
                         help='If true the data will come from the adding problem.')
     parser.add_argument('--subfolder', '-subfolder', type=str, default='exp1',
                         help='Specify a subfolder to use.')
+    parser.add_argument('--non_linearity', '-non_linearity', type=str, default='linear',
+                        help='Specify the unitary linearity. Options are linar, mod_relu \
+                              hirose, moebius, or loop to automatically run all options.')
 
     args = parser.parse_args()
     dict = vars(args)
-
+    act_loop = False
     # find and replace string arguments.
     for i in dict:
         if (dict[i] == "False"):
@@ -226,20 +236,49 @@ if __name__ == "__main__":
             dict[i] = cc.UnitaryCell
         elif dict[i] == "GUNN":
             dict[i] = cc.UnitaryMemoryCell
+        elif dict[i] == "linear":
+            dict[i] = linear
+        elif dict[i] == "mod_relu":
+            dict[i] = mod_relu
+        elif dict[i] == "hirose":
+            dict[i] = hirose
+        elif dict[i] == "moebius":
+            dict[i] = moebius
+        elif dict[i] == 'loop':
+            act_loop = True
 
-    kwargs = {'cell_fun': dict['model'],
-              'time_steps': dict['time_steps'],
-              'n_train': dict['n_train'],
-              'n_test': dict['n_test'],
-              'n_units': dict['n_units'],
-              'learning_rate': dict['learning_rate'],
-              'decay': dict['decay'],
-              'batch_size': dict['batch_size'],
-              'gpu_mem_frac': dict['gpu_mem_frac'],
-              'GPU': dict['GPU'],
-              'memory': dict['memory'],
-              'adding': dict['adding'],
-              'subfolder': dict['subfolder']}
+    if act_loop:
+        for act in [linear, mod_relu, hirose, moebius]:
+            kwargs = {'cell_fun': dict['model'],
+                      'time_steps': dict['time_steps'],
+                      'n_train': dict['n_train'],
+                      'n_test': dict['n_test'],
+                      'n_units': dict['n_units'],
+                      'learning_rate': dict['learning_rate'],
+                      'decay': dict['decay'],
+                      'batch_size': dict['batch_size'],
+                      'gpu_mem_frac': dict['gpu_mem_frac'],
+                      'GPU': dict['GPU'],
+                      'memory': dict['memory'],
+                      'adding': dict['adding'],
+                      'subfolder': dict['subfolder'],
+                      'activation': act}
+            main(**kwargs)
+    else:
+        kwargs = {'cell_fun': dict['model'],
+                  'time_steps': dict['time_steps'],
+                  'n_train': dict['n_train'],
+                  'n_test': dict['n_test'],
+                  'n_units': dict['n_units'],
+                  'learning_rate': dict['learning_rate'],
+                  'decay': dict['decay'],
+                  'batch_size': dict['batch_size'],
+                  'gpu_mem_frac': dict['gpu_mem_frac'],
+                  'GPU': dict['GPU'],
+                  'memory': dict['memory'],
+                  'adding': dict['adding'],
+                  'subfolder': dict['subfolder'],
+                  'activation': dict['non_linearity']}
 
-    # TODO: run multiple times for different sequence lengths.
-    main(**kwargs)
+        # TODO: run multiple times for different sequence lengths.
+        main(**kwargs)

@@ -88,10 +88,39 @@ def hirose(z, scope='', reuse=None):
     """
     Compute the non-linearity proposed by Hirose.
     """
-    modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
-    rescale = 2*tf.complex(tf.nn.tanh(modulus)/modulus,
-                           tf.zeros_like(modulus))
-    return tf.multiply(rescale, z)
+    with tf.variable_scope('hirose' + scope, reuse=reuse):
+        m = tf.get_variable('m', [], tf.float32,
+                            initializer=tf.urnd_init(0.9, 1.1))
+        modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
+        rescale = tf.complex(tf.nn.tanh(modulus/m)/modulus,
+                             tf.zeros_like(modulus))
+        return tf.multiply(rescale, z)
+
+
+def moebius(z, scope='', reuse=None):
+    """
+    Implement a learnable moebius transformation.
+    """
+    with tf.variable_scope('moebius' + scope, reuse=reuse):
+        ar = tf.get_variable('ar', [], tf.float32,
+                             initializer=tf.constant_initializer(1))
+        ai = tf.get_variable('ai', [], tf.float32,
+                             initializer=tf.constant_initializer(0))
+        b = tf.get_variable('b', [2], tf.float32,
+                            initializer=tf.constant_initializer(0))
+        c = tf.get_variable('c', [2], tf.float32,
+                            initializer=tf.constant_initializer(0))
+        dr = tf.get_variable('dr', [], tf.float32,
+                             initializer=tf.constant_initializer(1))
+        di = tf.get_variable('di', [], tf.float32,
+                             initializer=tf.constant_initializer(0))
+
+        a = tf.complex(ar, ai)
+        b = tf.complex(b[0], b[1])
+        c = tf.complex(c[0], c[1])
+        d = tf.complex(dr, di)
+        return tf.divide(tf.multiply(a, z) + b,
+                         tf.multiply(c, z) + d)
 
 
 def linear(z, scope='', reuse=None, coupled=False):
@@ -325,9 +354,9 @@ class UnitaryMemoryCell(UnitaryCell):
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
 
-    def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None):
+    def __init__(self, num_units, activation=moebius, num_proj=None, reuse=None):
         super().__init__(num_units, num_proj=num_proj, reuse=reuse)
-        self._temporal_activation = activation  # FIXME: beat linear.
+        self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
 
     def complex_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
@@ -376,7 +405,7 @@ class UnitaryMemoryCell(UnitaryCell):
             fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse, bias_init=1.0)
             ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse, bias_init=1.0)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
-            ht = self._temporal_activation(pre_h)
+            ht = self._activation(pre_h, reuse=reuse)
 
             # Mapping the state back onto the real axis.
             # By mapping.
