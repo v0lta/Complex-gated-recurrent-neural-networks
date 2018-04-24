@@ -90,7 +90,7 @@ def hirose(z, scope='', reuse=None):
     """
     with tf.variable_scope('hirose' + scope, reuse=reuse):
         m = tf.get_variable('m', [], tf.float32,
-                            initializer=tf.urnd_init(0.9, 1.1))
+                            initializer=urnd_init(0.9, 1.1))
         modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
         rescale = tf.complex(tf.nn.tanh(modulus/m)/modulus,
                              tf.zeros_like(modulus))

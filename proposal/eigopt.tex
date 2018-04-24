@@ -48,8 +48,28 @@ Finding a gradient for functions from $\mathbb{C}$ to $\mathbb{R}$, is a problem
 
 \section{Complex Unitary Memory cells}
 Setting up complex gating mechanisms is no trivial task, because functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
-Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore hard to implement, because there is no obvious complex gradient to train these gates.
+Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore hard to implement, because there is no obvious complex gradient to train these gates. 
+We define:
+\begin{align}
+\mathbf{i}_g &= \sigma(\mathbf{U}_i[\Re(\mathbf{h}_t) \; \Im(\mathbf{h}_t)]^T
+                + \mathbf{W}_i[\Re(\mathbf{x}) \; \Im(\mathbf{x})]^T )\\
+\mathbf{f}_g &= \sigma(\mathbf{U}_f[\Re(\mathbf{h}_t) \; \Im(\mathbf{h}_t)]^T
+                + \mathbf{W}_f[\Re(\mathbf{x}) \; \Im(\mathbf{x})]^T )\\
+\mathbf{h}_{t+1} &= \mathbf{U}f(\mathbf{f}_g \odot \mathbf{h}_t) + \mathbf{W}(\mathbf{i}_g \odot \mathbf{x})
+\end{align}
+Where $\mathbf{U}$ is a unitary matrix and $\mathbf{i}_g, \mathbf{f}_g$ are computed by mappings from $\mathbb{C} \rightarrow \mathbb{R}$. Our gates are therefore non-holomorph. We leverage Wirtinger calculus \cite{Franken}\cite{Delgado}\cite{Wirtinger}, to define a pseudogradient, which we argue is sufficient to train the gates. Please note that we do not distribute our derivatives over a sum, a major difference to the classical formulation in \cite{Hochreiter}. \\ 
+\textit{TODO: explain our gradient approximation.}
 
+\subsection{Proof of stability}
+Hochreiter et al. \cite{Hochreiter} have shown, that a similar cell defined on $\mathbb{R}$, must be stable. Following \cite{Arjovsky} we prove that Complex Unitary Memory cells are also be stable:
+\begin{align}
+\frac{\partial C}{\partial h_{t}} &= \frac{\partial C}{\partial h_T}\frac{\partial h_T}{\partial h_t} \\
+                                  &= \frac{\partial C}{\partial h_T}\prod_{k=t}^{T-1}\frac{\partial h_{k+1}}{\partial h_k} \\
+                                  &= \frac{\partial C}{\partial h_T}\prod_{k=t}^{T-1}\mathbf{U}
+                                  \mathbf{G}_{k+1} \frac{\partial \text{f}}{\partial h_k}
+\end{align}
+
+\subsection{Results}
 \begin{figure}
 \centering
 %\includestandalone[width=0.45\linewidth]{./img/cgmu/adding_problem}
@@ -57,13 +77,9 @@ Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \righta
 %\includestandalone[width=0.45\linewidth]{./img/cgmu/memory_problem}
 \includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem.pdf}
 \caption{Performance of the complex gated memory unit (cgmu, ours), the unitary neural network (unn, \cite{Arjovsky}), and long short term memory (lstm, \cite{Hochreiter}).}
+\label{fig:montreal_eval}
 \end{figure}
-
-\subsection{Proof of stability}
-TODO: Modify the proof from \cite{Arjovsky} and \cite{Hochreiter} to work with our cell.
-
-\subsection{Results}
-TODO: Implement and measure performance.
+To test our ideas we used the benchmark originally proposed in \cite{Hochreiter} following the implementation of \cite{Arjovsky}. A visualization of our results is shown in figure~\ref{fig:montreal_eval}. All modes where run with a state size of $512$, step size of $0.001$ and a batch size of $250$. For the memory problem, the baseline is at $0.173$, which all models beat. For the adding problem it is $0.167$. Again all models crack this treshhold. However the convergence behaviour differes. We argue that our apprach gets the bost of both worlds in terms of performance an converges well on both the adding and memory problems, it shows the supereor UNN dynamics on the memory problem, while at the same time behaving more like the LSTM on the adding problem, where it significantly outperforms both other models.
 
 \section{Other Ideas}
 \subsection{Fourier Space rotations.}
