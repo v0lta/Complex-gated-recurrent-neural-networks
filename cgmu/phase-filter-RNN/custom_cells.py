@@ -235,24 +235,21 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
         return tf.matmul(x, A) + b
 
 
-def complex_matmul_plus_bias(x, num_proj, scope, reuse):
+def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     """
     Compute Ax + b.
     Input: x
     Returns: Ax + b
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
+    # debug_here()
     with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
-        Ar = tf.get_variable('Ar', [in_shape[-1:], num_proj], dtype=tf.float32,
-                             initializer=tf.glorot_uniform_initializer())
-        Ai = tf.get_variable('Ai', [in_shape[-1:], num_proj], dtype=tf.float32,
-                             initializer=tf.glorot_uniform_initializer())
-        br = tf.get_variable('br', [num_proj], dtype=tf.float32,
-                             initializer=tf.constant_initializer(0.0))
-        bi = tf.get_variable('bi', [num_proj], dtype=tf.float32,
-                             initializer=tf.constant_initializer(0.0))
-        A = tf.complex(Ar, Ai)
-        b = tf.complex(br, bi)
+        varA = tf.get_variable('A', in_shape[-1:] + [num_proj] + [2], dtype=tf.float32,
+                               initializer=tf.glorot_uniform_initializer())
+        varb = tf.get_variable('b', [num_proj] + [2], dtype=tf.float32,
+                               initializer=tf.constant_initializer(bias_init))
+        A = tf.complex(varA[:, :, 0], varA[:, :, 1])
+        b = tf.complex(varb[:, 0], varb[:, 1])
     with tf.variable_scope('complex_linear_layer'):
         return tf.matmul(x, A) + b
 
@@ -306,7 +303,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
     # TODO h0.
 
-    def call(self, inputs, state, reuse=False):
+    def call(self, inputs, state):
         """
             Evaluate the RNN cell. Using
             h_(t+1) = U_t*f(h_t) + V_t x_t
@@ -358,6 +355,8 @@ class UnitaryMemoryCell(UnitaryCell):
         super().__init__(num_units, num_proj=num_proj, reuse=reuse)
         self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
+        self._single_gate = True
+        self._arjovski_basis = False
 
     def complex_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
         """
@@ -372,7 +371,22 @@ class UnitaryMemoryCell(UnitaryCell):
             scale = tf.nn.sigmoid(hr + xr)
             return tf.complex(scale, tf.zeros_like(scale))
 
-    def call(self, inputs, state, reuse=False):
+    def single_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
+        """
+        New unified gate.
+        """
+        with tf.variable_scope(scope, reuse):
+            gh = complex_matmul_plus_bias(h, self._num_units,
+                                          scope='gh', reuse=reuse, bias_init=bias_init)
+            gx = complex_matmul_plus_bias(h, self._num_units,
+                                          scope='gx', reuse=reuse, bias_init=bias_init)
+            g = gh + gx
+            ig = tf.nn.sigmoid(tf.real(g))
+            fg = tf.nn.sigmoid(tf.imag(g))
+            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
+                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
+
+    def call(self, inputs, state):
         """
             Evaluate the RNN cell. Using
             h_(t+1) = U_t*f(h_t) + V_t x_t
@@ -380,20 +394,30 @@ class UnitaryMemoryCell(UnitaryCell):
         with tf.variable_scope("UnitaryMemoryCell"):
 
             last_out, last_h = state
-            # Compute the hidden part.
-            step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
-            step2 = tf.spectral.fft(step1)
-            step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
-            step4 = permutation(step3, self._num_units, 0, self._reuse)
-            step5 = diag_mul(step4, self._num_units, 1, self._reuse)
-            step6 = tf.spectral.ifft(step5)
-            step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
-            Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+            if self._arjovski_basis:
+                with tf.variable_scope("arjovski_basis", reuse=self._reuse):
+                    step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+                    step2 = tf.spectral.fft(step1)
+                    step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
+                    step4 = permutation(step3, self._num_units, 0, self._reuse)
+                    step5 = diag_mul(step4, self._num_units, 1, self._reuse)
+                    step6 = tf.spectral.ifft(step5)
+                    step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
+                    Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+            else:
+                with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+                    varU = tf.get_variable("recurrent_U",
+                                           shape=[self._num_units, self._num_units, 2],
+                                           dtype=tf.float32)
+                    U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+                Uh = tf.matmul(last_h, U)
 
             # Deal with the inputs
             # Mapping inputs into the complex plane, by folding:
-            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+            Vxr = matmul_plus_bias(inputs, self._num_units,
+                                   scope='real', reuse=self._reuse)
+            Vxi = matmul_plus_bias(inputs, self._num_units,
+                                   scope='imag', reuse=self._reuse)
             Vx = tf.complex(Vxr, Vxi)
             # By leaving the real part intact.
             # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
@@ -402,10 +426,17 @@ class UnitaryMemoryCell(UnitaryCell):
             # By Hilbert transform.
             # TODO.
 
-            fg = self.complex_memory_gate(Uh, Vx, 'forget_gate', reuse, bias_init=1.0)
-            ig = self.complex_memory_gate(Uh, Vx, 'input_gate', reuse, bias_init=1.0)
+            if not self._single_gate:
+                ig = self.complex_memory_gate(Uh, Vx, scope='input_gate',
+                                              reuse=self._reuse, bias_init=1.0)
+                fg = self.complex_memory_gate(Uh, Vx, scope='forget_gate',
+                                              reuse=self._reuse, bias_init=1.0)
+            else:
+                ig, fg = self.single_memory_gate(Uh, Vx,
+                                                 scope='orthogonal_stiefel',
+                                                 reuse=self._reuse)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
-            ht = self._activation(pre_h, reuse=reuse)
+            ht = self._activation(pre_h, reuse=self._reuse)
 
             # Mapping the state back onto the real axis.
             # By mapping.

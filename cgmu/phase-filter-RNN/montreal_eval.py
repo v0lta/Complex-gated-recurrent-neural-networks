@@ -11,6 +11,8 @@ from custom_cells import hirose
 from custom_cells import linear
 from custom_cells import moebius
 
+from custom_optimizers import RMSpropNatGrad
+
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
 
@@ -111,14 +113,15 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
                 logits=y_hat, labels=y))
             loss_summary_op = tf.summary.scalar('cross_entropy', loss)
 
-        optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
+        # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
+        optimizer = RMSpropNatGrad(learning_rate, decay=decay)
         # with tf.variable_scope("gradient_clipping"):
         #     gvs = optimizer.compute_gradients(loss)
         #     # print(gvs)
         #     capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
         #     # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
         #     train_op = optimizer.apply_gradients(capped_gvs)
-
+        # debug_here()
         train_op = optimizer.minimize(loss)
         init_op = tf.global_variables_initializer()
         summary_op = tf.summary.merge_all()

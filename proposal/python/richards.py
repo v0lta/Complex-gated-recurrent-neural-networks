@@ -23,8 +23,8 @@ def richars_prime(x, k):
 
 
 x = np.linspace(-5, 5, 500)
-plt.plot(x, richards(x, 4), 'g')
-plt.plot(x, richars_prime(x, 4), 'g')
+plt.plot(x, richards(x, 1), 'g')
+plt.plot(x, richars_prime(x, 1), 'g')
 plt.show()
 
 if 0:
