@@ -20,6 +20,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
                  epsilon=1e-10, name='RMSpropNatGrad'):
         """
             TODO: Do documentation.
+            TODO: Implement unitary momentum.
         """
         use_locking = False
         super().__init__(use_locking, name)
@@ -28,13 +29,22 @@ class RMSpropNatGrad(tf.train.Optimizer):
         self._momentum = momentum
         self._epsilon = epsilon
 
-        # Tensor versions of the constructor arguments, created in _prepare().
+        # Tensors for learning rate and momentum.  Created in _prepare.
         self._learning_rate_tensor = None
         self._decay_tensor = None
         self._momentum_tensor = None
         self._epsilon_tensor = None
 
+    def _create_slots(self, var_list):
+        """ Set up rmsprop slots for all variables."""
+        for v in var_list:
+            init_rms = tf.ones_initializer(dtype=v.dtype)
+            self._get_or_make_slot_with_initializer(v, init_rms, v.get_shape(),
+                                                    v.dtype, "rms", self._name)
+            self._zeros_slot(v, "momentum", self._name)
+
     def _prepare(self):
+        """Convert algorthm parameters to tensors. """
         self._learning_rate_tensor = tf.convert_to_tensor(self._learning_rate,
                                                           name="learning_rate")
         self._decay_tensor = tf.convert_to_tensor(self._decay, name="decay")
@@ -43,28 +53,34 @@ class RMSpropNatGrad(tf.train.Optimizer):
         self._epsilon_tensor = tf.convert_to_tensor(self._epsilon,
                                                     name="epsilon")
 
-    def _create_slots(self, var_list):
-        """
-        Create slots from the original RMSprop class at:
-        https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/python/training/rmsprop.py
-        """
-        for v in var_list:
-            init_rms = tf.ones_initializer(dtype=v.dtype)
-            self._get_or_make_slot_with_initializer(v, init_rms, v.get_shape(),
-                                                    v.dtype, "rms", self._name)
-        self._zeros_slot(v, "momentum", self._name)
-
     def _apply_dense(self, grad, var):
         rms = self.get_slot(var, "rms")
         mom = self.get_slot(var, "momentum")
-
-        if 'orthogonal_stiefel' in var.name:
+        if 'orthogonal_stiefel' in var.name and 'bias' not in var.name:
             print('Appling an orthogonality preserving step to', var.name)
-            # do an orthogonality preserving update step.
-            debug_here()
-            # return tf.group([rms_assign_op])
-
-        elif 'unitary_stiefel' in var.name:
+            # apply the rms update rule.
+            new_rms = self._decay_tensor * rms + (1. - self._epsilon_tensor) \
+                * tf.square(grad)
+            rms_assign_op = tf.assign(rms, new_rms)
+            # the update should preserve orthogonality of real and imag-part.
+            # => deal with both seperately.
+            grad_shape = tf.Tensor.get_shape(grad).as_list()
+            W_new_lst = []
+            for i in [0, 1]:
+                eye = tf.eye(grad_shape[0], dtype=tf.float32)
+                G = grad[:, :, i]
+                W = var[:, :, i]
+                A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
+                CayleyDenom = eye + self._learning_rate_tensor/2.0 * A
+                CayleyNumer = eye + self._learning_rate_tensor/2.0 * A
+                W_new = tf.matmul(tf.matmul(tf.matrix_inverse(CayleyDenom),
+                                            CayleyNumer), W)
+                W_new_lst.append(W_new)
+            W_array = tf.stack(W_new_lst, -1)
+            var_update_op = tf.assign(var, W_array)
+            # the star unpacks the list, tf.group() needs that.
+            return tf.group(*[var_update_op, rms_assign_op])
+        elif 'unitary_stiefel' in var.name and 'bias' not in var.name:
             print('Appling an unitarity preserving step to', var.name)
             # apply the rms update rule.
             new_rms = self._decay_tensor * rms + (1. - self._epsilon_tensor) \
@@ -74,23 +90,24 @@ class RMSpropNatGrad(tf.train.Optimizer):
             # checking shapes.
             grad_shape = tf.Tensor.get_shape(grad).as_list()
             assert grad_shape[0] == grad_shape[1]
-            I = tf.eye(grad_shape[0], dtype=tf.complex64)
+            eye = tf.eye(grad_shape[0], dtype=tf.complex64)
             G = tf.complex(grad[:, :, 0], grad[:, :, 1])
             W = tf.complex(var[:, :, 0], var[:, :, 1])
             A = tf.matmul(tf.conj(tf.transpose(G)), W) \
                 - tf.matmul(tf.conj(tf.transpose(W)), G)
-            CayleyDenom = I + (self._learning_rate_tensor/2.0) * A
-            CayleyNumer = I + (self._learning_rate_tensor/2.0) * A
+            larning_rate_scale = tf.complex(self._learning_rate_tensor/2.0,
+                                            tf.zeros_like(self._learning_rate_tensor))
+            CayleyDenom = eye + larning_rate_scale * A
+            CayleyNumer = eye + larning_rate_scale * A
             W_new = tf.matmul(tf.matmul(tf.matrix_inverse(CayleyDenom), CayleyNumer), W)
             W_new_re = tf.real(W_new)
             W_new_img = tf.imag(W_new)
             W_array = tf.stack([W_new_re, W_new_img], -1)
-            debug_here()
-            print('dbg')
-            return tf.group([rms_assign_op])
+            var_update_op = tf.assign(var, W_array)
+            # the star unpacks the list, tf.group() needs that.
+            return tf.group(*[var_update_op, rms_assign_op])
         else:
             print('Appling standard rmsprop to', var.name)
-            debug_here()
             return training_ops.apply_rms_prop(
                 var, rms, mom,
                 tf.cast(self._learning_rate_tensor, var.dtype.base_dtype),

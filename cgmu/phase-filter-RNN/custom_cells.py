@@ -227,9 +227,9 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     with tf.variable_scope("linear_" + scope, reuse=reuse):
         A = tf.get_variable('A', [in_shape[-1], num_proj], dtype=tf.float32,
                             initializer=tf.glorot_uniform_initializer())
-        b = tf.get_variable('b', [num_proj], dtype=tf.float32,
+        b = tf.get_variable('bias', [num_proj], dtype=tf.float32,
                             initializer=tf.constant_initializer(bias_init))
-        print('Initializing', tf.contrib.framework.get_name_scope(), 'b to',
+        print('Initializing', tf.contrib.framework.get_name_scope(), 'bias to',
               bias_init)
     with tf.variable_scope('linear_layer'):
         return tf.matmul(x, A) + b
@@ -246,7 +246,7 @@ def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
         varA = tf.get_variable('A', in_shape[-1:] + [num_proj] + [2], dtype=tf.float32,
                                initializer=tf.glorot_uniform_initializer())
-        varb = tf.get_variable('b', [num_proj] + [2], dtype=tf.float32,
+        varb = tf.get_variable('bias', [num_proj] + [2], dtype=tf.float32,
                                initializer=tf.constant_initializer(bias_init))
         A = tf.complex(varA[:, :, 0], varA[:, :, 1])
         b = tf.complex(varb[:, 0], varb[:, 1])
