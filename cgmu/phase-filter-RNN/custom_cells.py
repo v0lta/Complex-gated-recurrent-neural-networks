@@ -244,12 +244,16 @@ def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     in_shape = tf.Tensor.get_shape(x).as_list()
     # debug_here()
     with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
-        varA = tf.get_variable('A', in_shape[-1:] + [num_proj] + [2], dtype=tf.float32,
-                               initializer=tf.glorot_uniform_initializer())
-        varb = tf.get_variable('bias', [num_proj] + [2], dtype=tf.float32,
-                               initializer=tf.constant_initializer(bias_init))
-        A = tf.complex(varA[:, :, 0], varA[:, :, 1])
-        b = tf.complex(varb[:, 0], varb[:, 1])
+        Ar = tf.get_variable('Ar', in_shape[-1:] + [num_proj], dtype=tf.float32,
+                             initializer=tf.orthogonal_initializer())
+        Ai = tf.get_variable('Ai', in_shape[-1:] + [num_proj], dtype=tf.float32,
+                             initializer=tf.orthogonal_initializer())
+        br = tf.get_variable('bias', [num_proj], dtype=tf.float32,
+                             initializer=tf.constant_initializer(bias_init))
+        bi = tf.get_variable('bias', [num_proj], dtype=tf.float32,
+                             initializer=tf.constant_initializer(bias_init))
+        A = tf.complex(Ar, Ai)
+        b = tf.complex(br, bi)
     with tf.variable_scope('complex_linear_layer'):
         return tf.matmul(x, A) + b
 
@@ -408,7 +412,8 @@ class UnitaryMemoryCell(UnitaryCell):
                 with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
                     varU = tf.get_variable("recurrent_U",
                                            shape=[self._num_units, self._num_units, 2],
-                                           dtype=tf.float32)
+                                           dtype=tf.float32,
+                                           initializer=unitary_init)
                     U = tf.complex(varU[:, :, 0], varU[:, :, 1])
                 Uh = tf.matmul(last_h, U)
 
@@ -449,3 +454,17 @@ class UnitaryMemoryCell(UnitaryCell):
             # print('dbg')
             newstate = URNNStateTuple(output, ht)
         return output, newstate
+
+
+def unitary_init(shape, dtype=np.float32, partition_info=None):
+    limit = np.sqrt(6 / (shape[0] + shape[1]))
+    rand_r = np.random.uniform(-limit, limit, shape)
+    rand_i = np.random.uniform(-limit, limit, shape)
+    crand = rand_r + 1j*rand_i
+    u, s, vh = np.linalg.svd(crand)
+    # use u and vg to create a unitary matrix:
+    unitary = np.matmul(u, np.transpose(np.conj(vh)))
+    # test
+    # plt.imshow(np.abs(np.matmul(unitary, np.transpose(np.conj(unitary))))); plt.show()
+    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
+    return stacked.astype(dtype)
