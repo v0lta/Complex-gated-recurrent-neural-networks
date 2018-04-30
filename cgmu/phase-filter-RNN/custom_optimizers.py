@@ -65,19 +65,16 @@ class RMSpropNatGrad(tf.train.Optimizer):
             # the update should preserve orthogonality of real and imag-part.
             # => deal with both seperately.
             grad_shape = tf.Tensor.get_shape(grad).as_list()
-            W_new_lst = []
-            for i in [0, 1]:
-                eye = tf.eye(grad_shape[0], dtype=tf.float32)
-                G = grad[:, :, i]
-                W = var[:, :, i]
-                A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
-                CayleyDenom = eye + self._learning_rate_tensor/2.0 * A
-                CayleyNumer = eye + self._learning_rate_tensor/2.0 * A
-                W_new = tf.matmul(tf.matmul(tf.matrix_inverse(CayleyDenom),
-                                            CayleyNumer), W)
-                W_new_lst.append(W_new)
-            W_array = tf.stack(W_new_lst, -1)
-            var_update_op = tf.assign(var, W_array)
+            # W_new_lst = []
+            eye = tf.eye(grad_shape[0], dtype=tf.float32)
+            G = grad
+            W = var
+            A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
+            CayleyDenom = eye + self._learning_rate_tensor/2.0 * A
+            CayleyNumer = eye + self._learning_rate_tensor/2.0 * A
+            W_new = tf.matmul(tf.matmul(tf.matrix_inverse(CayleyDenom),
+                                        CayleyNumer), W)
+            var_update_op = tf.assign(var, W_new)
             # the star unpacks the list, tf.group() needs that.
             return tf.group(*[var_update_op, rms_assign_op])
         elif 'unitary_stiefel' in var.name and 'bias' not in var.name:

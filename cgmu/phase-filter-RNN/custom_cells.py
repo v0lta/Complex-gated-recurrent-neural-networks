@@ -248,9 +248,9 @@ def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
                              initializer=tf.orthogonal_initializer())
         Ai = tf.get_variable('Ai', in_shape[-1:] + [num_proj], dtype=tf.float32,
                              initializer=tf.orthogonal_initializer())
-        br = tf.get_variable('bias', [num_proj], dtype=tf.float32,
+        br = tf.get_variable('bias_r', [num_proj], dtype=tf.float32,
                              initializer=tf.constant_initializer(bias_init))
-        bi = tf.get_variable('bias', [num_proj], dtype=tf.float32,
+        bi = tf.get_variable('bias_i', [num_proj], dtype=tf.float32,
                              initializer=tf.constant_initializer(bias_init))
         A = tf.complex(Ar, Ai)
         b = tf.complex(br, bi)
@@ -458,8 +458,8 @@ class UnitaryMemoryCell(UnitaryCell):
 
 def unitary_init(shape, dtype=np.float32, partition_info=None):
     limit = np.sqrt(6 / (shape[0] + shape[1]))
-    rand_r = np.random.uniform(-limit, limit, shape)
-    rand_i = np.random.uniform(-limit, limit, shape)
+    rand_r = np.random.uniform(-limit, limit, shape[0:2])
+    rand_i = np.random.uniform(-limit, limit, shape[0:2])
     crand = rand_r + 1j*rand_i
     u, s, vh = np.linalg.svd(crand)
     # use u and vg to create a unitary matrix:
@@ -467,4 +467,5 @@ def unitary_init(shape, dtype=np.float32, partition_info=None):
     # test
     # plt.imshow(np.abs(np.matmul(unitary, np.transpose(np.conj(unitary))))); plt.show()
     stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
-    return stacked.astype(dtype)
+    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
+    return tf.constant(stacked, dtype)

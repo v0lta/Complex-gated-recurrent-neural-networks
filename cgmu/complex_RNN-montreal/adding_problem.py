@@ -184,5 +184,4 @@ if __name__=="__main__":
               'input_type': dict['input_type'],              
               'out_every_t': 'True'==dict['out_every_t'],
               'loss_function': dict['loss_function']}
-
     main(**kwargs)
