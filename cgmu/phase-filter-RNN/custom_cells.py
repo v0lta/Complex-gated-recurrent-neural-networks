@@ -138,8 +138,6 @@ def rfl_mul(h, state_size, no, reuse):
     Returns:
         R*h
     """
-    # TODO: Gradients are None when reflections are used.
-    # Fix this!
     with tf.variable_scope("reflection_v_" + str(no), reuse=reuse):
         vr = tf.get_variable('vr', shape=[state_size, 1], dtype=tf.float32,
                              initializer=tf.glorot_uniform_initializer())
@@ -273,6 +271,7 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         self._num_units = num_units
         self._activation = activation
         self._output_size = num_proj
+        self._arjovski_basis = False
 
     @property
     def state_size(self):
@@ -314,15 +313,25 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         """
         with tf.variable_scope("UnitaryCell"):
             last_out, last_h = state
-            # Compute the hidden part.
-            step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
-            step2 = tf.spectral.fft(step1)
-            step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
-            step4 = permutation(step3, self._num_units, 0, self._reuse)
-            step5 = diag_mul(step4, self._num_units, 1, self._reuse)
-            step6 = tf.spectral.ifft(step5)
-            step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
-            Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+            if self._arjovski_basis:
+                with tf.variable_scope("arjovski_basis", reuse=self._reuse):
+                    step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+                    step2 = tf.spectral.fft(step1)
+                    step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
+                    step4 = permutation(step3, self._num_units, 0, self._reuse)
+                    step5 = diag_mul(step4, self._num_units, 1, self._reuse)
+                    step6 = tf.spectral.ifft(step5)
+                    step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
+                    Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+            else:
+                with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+                    varU = tf.get_variable("recurrent_U",
+                                           shape=[self._num_units, self._num_units, 2],
+                                           dtype=tf.float32,
+                                           initializer=arjovski_init)
+                    U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+                    # U = tf.Print(U, [U])
+                Uh = tf.matmul(last_h, U)
 
             # Deal with the inputs
             # Mapping inputs into the complex plane, by folding:
@@ -456,7 +465,7 @@ class UnitaryMemoryCell(UnitaryCell):
         return output, newstate
 
 
-def unitary_init(shape, dtype=np.float32, partition_info=None):
+def unitary_init(shape, dtype=tf.float32, partition_info=None):
     limit = np.sqrt(6 / (shape[0] + shape[1]))
     rand_r = np.random.uniform(-limit, limit, shape[0:2])
     rand_i = np.random.uniform(-limit, limit, shape[0:2])
@@ -464,8 +473,60 @@ def unitary_init(shape, dtype=np.float32, partition_info=None):
     u, s, vh = np.linalg.svd(crand)
     # use u and vg to create a unitary matrix:
     unitary = np.matmul(u, np.transpose(np.conj(vh)))
+
+    test_eye = np.matmul(np.transpose(np.conj(unitary)), unitary)
+    print('I - Wi.H Wi', np.linalg.norm(test_eye) - unitary)
     # test
     # plt.imshow(np.abs(np.matmul(unitary, np.transpose(np.conj(unitary))))); plt.show()
+    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
+    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
+    # debug_here()
+    return tf.constant(stacked, dtype)
+
+
+def arjovski_init(shape, dtype=tf.float32, partition_info=None):
+    print("Arjosky basis initialization.")
+    assert shape[0] == shape[1]
+    omega1 = np.random.uniform(-np.pi, np.pi, shape[0])
+    omega2 = np.random.uniform(-np.pi, np.pi, shape[0])
+    omega3 = np.random.uniform(-np.pi, np.pi, shape[0])
+
+    vr1 = np.random.uniform(-1, 1, [shape[0], 1])
+    vi1 = np.random.uniform(-1, 1, [shape[0], 1])
+    v1 = vr1 + 1j*vi1
+    vr2 = np.random.uniform(-1, 1, [shape[0], 1])
+    vi2 = np.random.uniform(-1, 1, [shape[0], 1])
+    v2 = vr2 + 1j*vi2
+
+    D1 = np.diag(np.exp(1j*omega1))
+    D2 = np.diag(np.exp(1j*omega2))
+    D3 = np.diag(np.exp(1j*omega3))
+
+    vvh1 = np.matmul(v1, np.transpose(np.conj(v1)))
+    beta1 = 2./np.matmul(np.transpose(np.conj(v1)), v1)
+    R1 = np.eye(shape[0]) - beta1*vvh1
+
+    vvh2 = np.matmul(v2, np.transpose(np.conj(v2)))
+    beta2 = 2./np.matmul(np.transpose(np.conj(v2)), v2)
+    R2 = np.eye(shape[0]) - beta2*vvh2
+
+    perm = np.random.permutation(np.eye(shape[0], dtype=np.float32)) \
+        + 1j*np.zeros(shape[0])
+
+    fft = np.fft.fft
+    ifft = np.fft.ifft
+
+    step1 = fft(D1)
+    step2 = np.matmul(R1, step1)
+    step3 = np.matmul(perm, step2)
+    step4 = np.matmul(D2, step3)
+    step5 = ifft(step4)
+    step6 = np.matmul(R2, step5)
+    unitary = np.matmul(D3, step6)
+    eye_test = np.matmul(np.transpose(np.conj(unitary)), unitary)
+    unitary_test = np.linalg.norm(np.eye(shape[0]) - eye_test)
+    print('I - Wi.H Wi', unitary_test)
+    assert unitary_test < 1e-10, "Unitary initialization not unitary enough."
     stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
     assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
     return tf.constant(stacked, dtype)

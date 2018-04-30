@@ -1,5 +1,6 @@
 # Recreation of the Montreal adding problem experiments from Arjovski et al.
 # Working with Tensorflow 1.3
+import os
 import time
 import numpy as np
 import tensorflow as tf
@@ -13,8 +14,10 @@ from custom_cells import moebius
 
 from custom_optimizers import RMSpropNatGrad
 
+
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def generate_data_adding(time_steps, n_data):
@@ -102,7 +105,7 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             y_hat = y_hat[0]  # throw away the final state.
             y_hat = y_hat[:, -1, :]  # only the final output is interesting.
             loss = tf.losses.mean_squared_error(y, y_hat)
-            loss_summary_op = tf.summary.scalar('mse', loss)
+            tf.summary.scalar('mse', loss)
 
         if memory:
             x = tf.placeholder(tf.float32, shape=(batch_size, time_steps+20, 1))
@@ -111,7 +114,7 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             y_hat = y_hat[0]
             loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=y_hat, labels=y))
-            loss_summary_op = tf.summary.scalar('cross_entropy', loss)
+            tf.summary.scalar('cross_entropy', loss)
 
         # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
         optimizer = RMSpropNatGrad(learning_rate, decay=decay)
@@ -141,6 +144,9 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
         + '_' + str(batch_size) + '_' + cell._activation.__name__ \
         + '_' + cell.__class__.__name__
+    if cell.__class__.__name__ is "UnitaryCell" or "UnitaryMemoryCell":
+        param_str += '_' + 'arjovski_basis' + '_' + str(cell._arjovski_basis)
+        param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
     summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
                                            + param_str, graph=graph)
     print(param_str)
@@ -162,8 +168,11 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
                 feed_dict = {x: np.transpose(x_batch, (1, 0, 2)),
                              y: y_batch}
             run_lst = [loss, summary_op, train_op]
+            tic = time.time()
             np_loss, summary_mem, _ = sess.run(run_lst, feed_dict=feed_dict)
-            print('iteration', i/100, '*10^2', np_loss, 'Baseline', baseline)
+            toc = time.time()
+            print('iteration', i/100, '*10^2', np_loss, 'Baseline', baseline,
+                  'update took:', toc - tic, 's')
             train_plot.append([i/100, np_loss])
             summary_writer.add_summary(summary_mem, global_step=i)
 
@@ -198,7 +207,7 @@ if __name__ == "__main__":
                         help='Model name: LSTM, UNN, GUNN')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
                         help='Copying Problem delay')
-    parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
+    parser.add_argument('--n_train', '-n_train', type=int, default=int(2e6),
                         help='training iteration number')
     parser.add_argument('--n_test', '-n_test', type=int, default=int(1e4),
                         help='training iteration number')
