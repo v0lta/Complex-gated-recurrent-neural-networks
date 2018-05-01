@@ -525,7 +525,7 @@ def arjovski_init(shape, dtype=tf.float32, partition_info=None):
     unitary = np.matmul(D3, step6)
     eye_test = np.matmul(np.transpose(np.conj(unitary)), unitary)
     unitary_test = np.linalg.norm(np.eye(shape[0]) - eye_test)
-    print('I - Wi.H Wi', unitary_test)
+    print('I - Wi.H Wi', unitary_test, unitary.dtype)
     assert unitary_test < 1e-10, "Unitary initialization not unitary enough."
     stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
     assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."

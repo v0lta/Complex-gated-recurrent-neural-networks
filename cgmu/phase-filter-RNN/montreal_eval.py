@@ -88,9 +88,11 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         baseline = 0.167
     else:
         raise NotImplementedError()
-    # set up the rnn graph.
+
+    # ------------------------- set up the rnn graph. ---------------------------
     graph = tf.Graph()
     with graph.as_default():
+        global_step = tf.Variable(0, trainable=False, name='global_step')
         # #### Cell selection. ####
         if cell_fun.__name__ == 'LSTMCell':
             cell = cell_fun(num_units=n_units, num_proj=output_size)
@@ -117,7 +119,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             tf.summary.scalar('cross_entropy', loss)
 
         # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
-        optimizer = RMSpropNatGrad(learning_rate, decay=decay)
+        optimizer = RMSpropNatGrad(learning_rate=learning_rate, decay=decay,
+                                   global_step=global_step)
         # with tf.variable_scope("gradient_clipping"):
         #     gvs = optimizer.compute_gradients(loss)
         #     # print(gvs)
@@ -125,7 +128,7 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         #     # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
         #     train_op = optimizer.apply_gradients(capped_gvs)
         # debug_here()
-        train_op = optimizer.minimize(loss)
+        train_op = optimizer.minimize(loss, global_step=global_step)
         init_op = tf.global_variables_initializer()
         summary_op = tf.summary.merge_all()
 
@@ -151,7 +154,7 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
                                            + param_str, graph=graph)
     print(param_str)
 
-    # and run it!
+    # ------------------------- and run it! ---------------------------------
     train_plot = []
     with tf.Session(graph=graph, config=config) as sess:
         init_op.run()
@@ -167,14 +170,15 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
                 y_batch = train_data[1][(i)*batch_size:(i+1)*batch_size, :]
                 feed_dict = {x: np.transpose(x_batch, (1, 0, 2)),
                              y: y_batch}
-            run_lst = [loss, summary_op, train_op]
+            run_lst = [loss, summary_op, global_step, train_op]
             tic = time.time()
-            np_loss, summary_mem, _ = sess.run(run_lst, feed_dict=feed_dict)
+            np_loss, summary_mem, np_global_step, _ =  \
+                sess.run(run_lst, feed_dict=feed_dict)
             toc = time.time()
             print('iteration', i/100, '*10^2', np_loss, 'Baseline', baseline,
                   'update took:', toc - tic, 's')
             train_plot.append([i/100, np_loss])
-            summary_writer.add_summary(summary_mem, global_step=i)
+            summary_writer.add_summary(summary_mem, global_step=np_global_step)
 
         test_losses = []
         for j in range(test_iterations):

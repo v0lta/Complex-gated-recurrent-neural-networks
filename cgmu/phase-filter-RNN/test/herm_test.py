@@ -59,6 +59,7 @@ def unitary_init(shape, dtype=np.float32, partition_info=None):
 test_graph = tf.Graph()
 with test_graph.as_default():
     dtype = tf.float64
+    cdtype = tf.complex128
     var = tf.get_variable('W', shape=[512, 512, 2], initializer=unitary_init,
                           dtype=dtype)
     W = tf.complex(var[:, :, 0], var[:, :, 1])
@@ -69,7 +70,7 @@ with test_graph.as_default():
                    tf.random_uniform([512, 512], dtype=dtype))
     grad_shape = tf.Tensor.get_shape(G).as_list()
     assert grad_shape[0] == grad_shape[1]
-    eye = tf.eye(grad_shape[0], dtype=tf.complex128)
+    eye = tf.eye(grad_shape[0], dtype=cdtype)
     A = tf.matmul(tf.conj(tf.transpose(G)), W) \
         - tf.matmul(tf.conj(tf.transpose(W)), G)
     test_a = tf.transpose(tf.conj(A)) - (-A)

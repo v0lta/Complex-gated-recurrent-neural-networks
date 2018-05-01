@@ -17,12 +17,17 @@ class RMSpropNatGrad(tf.train.Optimizer):
     """
 
     def __init__(self, learning_rate, decay=0.9, momentum=0.0,
-                 epsilon=1e-10, nat_grad_normalization=False,
-                 name='RMSpropNatGrad'):
+                 epsilon=1e-10, global_step=None, nat_grad_normalization=False,
+                 svd_steps=1e3, name='RMSpropNatGrad'):
         """
             TODO: Do documentation.
             TODO: Implement unitary momentum.
         """
+        if global_step is not None:
+            self._global_step_tensor = global_step
+        else:
+            raise ValueError("global_step must be tensor missing.")
+
         use_locking = False
         super().__init__(use_locking, name)
         self._learning_rate = learning_rate
@@ -31,6 +36,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         self._epsilon = epsilon
         self._nat_grad_normalization = nat_grad_normalization
         self._debug = True
+        self._svd_steps = svd_steps
 
         # Tensors for learning rate and momentum.  Created in _prepare.
         self._learning_rate_tensor = None
@@ -81,6 +87,9 @@ class RMSpropNatGrad(tf.train.Optimizer):
         test_w_norm = tf.real(tf.norm(test_w))
         tf.summary.scalar('I-W.HW', test_w_norm)
 
+    def re_unitarize(self, W):
+        pass
+
     def _apply_dense(self, grad, var):
         rms = self.get_slot(var, "rms")
         mom = self.get_slot(var, "momentum")
@@ -102,7 +111,8 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 eye = tf.eye(grad_shape[0], dtype=tf.float32)
                 G = grad
                 W = var
-                A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
+                # A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
+                A = tf.matmul(G, tf.transpose(W)) - tf.matmul(W, tf.transpose(G))
                 cayleyDenom = eye + (self._learning_rate_tensor/2.0 * A)
                 cayleyNumer = eye - (self._learning_rate_tensor/2.0 * A)
                 C = tf.matmul(tf.matrix_inverse(cayleyDenom), cayleyNumer)
@@ -130,8 +140,8 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 eye = tf.eye(grad_shape[0], dtype=tf.complex64)
                 G = tf.complex(grad[:, :, 0], grad[:, :, 1])
                 W = tf.complex(var[:, :, 0], var[:, :, 1])
-                A = tf.matmul(tf.conj(tf.transpose(G)), W) \
-                    - tf.matmul(tf.conj(tf.transpose(W)), G)
+                A = tf.matmul(G, tf.conj(tf.transpose(W))) \
+                    - tf.matmul(W, tf.conj(tf.transpose(G)))
                 # A must be skew symmetric.
                 larning_rate_scale = tf.complex(self._learning_rate_tensor/2.0,
                                                 tf.zeros_like(self._learning_rate_tensor))
@@ -143,11 +153,23 @@ class RMSpropNatGrad(tf.train.Optimizer):
                     self._summary_A(A)
                     self._summary_C(C)
                     self._summary_W(W)
+                # Reunitarize after n steps.
+                #W_new = tf.cond(self._global_step_tensor)
+                #debug_here()
                 W_new_re = tf.real(W_new)
                 W_new_img = tf.imag(W_new)
                 W_array = tf.stack([W_new_re, W_new_img], -1)
                 var_update_op = tf.assign(var, W_array)
                 return tf.group(*[var_update_op, rms_assign_op])
+                # else:
+                #     # unitarity assertion
+                #     eye = tf.eye(*tf.Tensor.get_shape(W).as_list(), dtype=W.dtype)
+                #     test_w = eye - tf.matmul(tf.transpose(tf.conj(W)), W)
+                #     test_w_norm = tf.real(tf.norm(test_w))
+                #     unitary_assertion = tf.Assert(tf.less(test_w_norm, 1e-4),
+                #                                   [test_w_norm])
+                #     return tf.group(*[var_update_op, rms_assign_op, unitary_assertion])
+
         else:
             # do the usual RMSprop update
             if 0:
