@@ -17,7 +17,7 @@ from custom_optimizers import RMSpropNatGrad
 
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def generate_data_adding(time_steps, n_data):
@@ -62,18 +62,19 @@ def generate_data_memory(time_steps, n_data, n_sequence):
     return x, y
 
 
-def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
+def main(time_steps=100, n_train=int(2e7), n_test=int(1e4),
          n_units=512, learning_rate=1e-3, decay=0.9,
          batch_size=50, GPU=0, memory=False, adding=True,
          cell_fun=tf.contrib.rnn.LSTMCell, activation=mod_relu,
          subfolder='exp1', gpu_mem_frac=1.0,
-         qr_steps=-1):
+         qr_steps=-1, orthogonal=False, unitary=False):
     """
     This main function does all the experimentation.
     """
 
     train_iterations = int(n_train/batch_size)
     test_iterations = int(n_test/batch_size)
+    print("Train iterations:", train_iterations)
     if memory:
         output_size = 9
         n_sequence = 10
@@ -95,11 +96,15 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
     with graph.as_default():
         global_step = tf.Variable(0, trainable=False, name='global_step')
         # #### Cell selection. ####
-        if cell_fun.__name__ == 'LSTMCell':
-            cell = cell_fun(num_units=n_units, num_proj=output_size)
-        else:
+        if cell_fun.__name__ == 'UnitaryCell':
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             activation=activation)
+        elif cell_fun.__name__ == 'UnitaryMemoryCell':
+            cell = cell_fun(num_units=n_units, num_proj=output_size,
+                            activation=activation, orthogonal_gate=orthogonal,
+                            unitary_gate=unitary)
+        else:
+            cell = cell_fun(num_units=n_units, num_proj=output_size)
 
         if adding:
             x = tf.placeholder(tf.float32, shape=(batch_size, time_steps, 2))
@@ -146,16 +151,13 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         problem = 'adding'
     param_str = '_' + problem + '_' + str(time_steps) + '_' + str(n_train) \
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
-        + '_' + str(batch_size) + '_' + cell._activation.__name__ \
-        + '_' + cell.__class__.__name__
+        + '_' + str(batch_size)
     # TODO. add statement checking if the nat grad optimizer is there.
     if cell.__class__.__name__ is "UnitaryCell" or \
        cell.__class__.__name__ is "UnitaryMemoryCell":
-        param_str += '_' + 'arjovski_basis' + '_' + str(cell._arjovski_basis)
+        param_str += '_' + cell.to_string()
         param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
         param_str += '_' + 'qr_steps' + '_' + str(optimizer._qr_steps)
-        if cell.__class__.__name__ is "UnitaryMemoryCell":
-            param_str += '_' + 'single_gate' + '_' + str(cell._single_gate)
     summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
                                            + param_str, graph=graph)
     print(param_str)
@@ -248,6 +250,10 @@ if __name__ == "__main__":
                         help='Specify how often numerical errors should be corrected and \
                               the state related matrices reorthogonalized, \
                               -1 means no qr.')
+    parser.add_argument('--orthogonal', '-orthogonal', type=str, default='False',
+                        help='Sould the memory cell gates be orthogonal.')
+    parser.add_argument('--unitary', '-unitary', type=str, default='False',
+                        help='Sould the memory cell gates be orthogonal.')
 
     args = parser.parse_args()
     dict = vars(args)
@@ -291,7 +297,9 @@ if __name__ == "__main__":
                       'adding': dict['adding'],
                       'subfolder': dict['subfolder'],
                       'activation': act,
-                      'qr_steps': dict['qr_steps']}
+                      'qr_steps': dict['qr_steps'],
+                      'orthogonal': dict['orthogonal'],
+                      'unitary': dict['unitary']}
             main(**kwargs)
     else:
         kwargs = {'cell_fun': dict['model'],
@@ -308,7 +316,9 @@ if __name__ == "__main__":
                   'adding': dict['adding'],
                   'subfolder': dict['subfolder'],
                   'activation': dict['non_linearity'],
-                  'qr_steps': dict['qr_steps']}
+                  'qr_steps': dict['qr_steps'],
+                  'orthogonal': dict['orthogonal'],
+                  'unitary': dict['unitary']}
 
         # TODO: run multiple times for different sequence lengths.
         main(**kwargs)

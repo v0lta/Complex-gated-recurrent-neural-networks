@@ -106,7 +106,7 @@ with tf.Session(graph=test_graph, config=config) as sess:
     # plt.imshow(np.abs(np.matmul(np.transpose(np.conj(npW_new)), npW_new)))
     # plt.show()
 
-# --------------------------------- test tf svd ----------------------------
+# -------------------- test tf svd -----------------------------------------
 svd_graph = tf.Graph()
 with svd_graph.as_default():
     R = tf.complex(tf.random_uniform([512, 512], dtype=dtype),
@@ -134,7 +134,7 @@ with tf.Session(graph=svd_graph, config=config) as sess:
     print('Ru  reconst', ru)
 
 
-# --------------------------------- test orthogonal initializer -----------
+# ---------------------- test orthogonal initializer ----------------------
 otg = tf.Graph()
 with otg.as_default():
     test_var = tf.get_variable('orth_test', [128, 128], dtype=dtype,

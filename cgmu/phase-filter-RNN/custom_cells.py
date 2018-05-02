@@ -289,6 +289,12 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         self._output_size = num_proj
         self._arjovski_basis = False
 
+    def to_string(self):
+        cell_str = 'UnitaryCell' + '_' \
+            + '_' + 'activation' + '_' + str(self._activation.__name__) + '_' \
+            + '_arjovski_basis' + '_' + str(self._arjovski_basis)
+        return cell_str
+
     @property
     def state_size(self):
         return URNNStateTuple(self._num_units, self._num_units)
@@ -380,13 +386,27 @@ class UnitaryMemoryCell(UnitaryCell):
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
 
-    def __init__(self, num_units, activation=moebius, num_proj=None, reuse=None):
-        super().__init__(num_units, num_proj=num_proj, reuse=reuse)
+    def __init__(self, num_units, activation=moebius, num_proj=None, reuse=None,
+                 orthogonal_gate=False, unitary_gate=False):
+        super().__init__(num_units, num_proj=num_proj, reuse=reuse, )
         self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
         self._single_gate = True
-        self._orthogonal_gate = False
+        self._orthogonal_gate = orthogonal_gate
+        self._unitary_gate = unitary_gate
         self._arjovski_basis = False
+
+        if orthogonal_gate and unitary_gate:
+            raise ValueError("Gates cannot be split orthogonal and unitary.")
+
+    def to_string(self):
+        cell_str = 'UnitaryMemoryCell' + '_' \
+            + '_activation' + '_' + str(self._activation.__name__) \
+            + '_singleGate' + '_' + str(self._single_gate) + '_' \
+            + '_orthogonalGate' + '_' + str(self._orthogonal_gate) \
+            + '_unitaryGate' + '_' + str(self._unitary_gate) \
+            + '_arjovskiBasis' + '_' + str(self._arjovski_basis)
+        return cell_str
 
     def complex_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
         """
@@ -401,7 +421,8 @@ class UnitaryMemoryCell(UnitaryCell):
             scale = tf.nn.sigmoid(hr + xr)
             return tf.complex(scale, tf.zeros_like(scale))
 
-    def single_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
+    def single_memory_gate(self, h, x, scope, reuse, bias_init=0.0,
+                           unitary=False, orthogonal=False):
         """
         New unified gate.
         """
@@ -409,7 +430,8 @@ class UnitaryMemoryCell(UnitaryCell):
             gh = complex_matmul_plus_bias(h, self._num_units,
                                           scope='gh',
                                           reuse=reuse, bias_init=bias_init,
-                                          unitary=False, orthogonal=True)
+                                          unitary=unitary,
+                                          orthogonal=orthogonal)
             gx = complex_matmul_plus_bias(x, self._num_units,
                                           scope='gx', reuse=reuse, bias_init=bias_init)
             g = gh + gx
@@ -467,7 +489,10 @@ class UnitaryMemoryCell(UnitaryCell):
                 ig, fg = self.single_memory_gate(Uh, Vx,
                                                  scope='single_gate',
                                                  reuse=self._reuse,
-                                                 bias_init=1.0)
+                                                 bias_init=1.0,
+                                                 unitary=self._unitary_gate,
+                                                 orthogonal=self._orthogonal_gate
+                                                 )
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
             ht = self._activation(pre_h, reuse=self._reuse)
 
