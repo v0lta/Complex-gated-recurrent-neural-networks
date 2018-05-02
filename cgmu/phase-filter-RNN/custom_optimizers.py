@@ -18,7 +18,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
 
     def __init__(self, learning_rate, decay=0.9, momentum=0.0,
                  epsilon=1e-10, global_step=None, nat_grad_normalization=False,
-                 svd_steps=1e3, name='RMSpropNatGrad'):
+                 qr_steps=None, name='RMSpropNatGrad'):
         """
             TODO: Do documentation.
             TODO: Implement unitary momentum.
@@ -36,7 +36,10 @@ class RMSpropNatGrad(tf.train.Optimizer):
         self._epsilon = epsilon
         self._nat_grad_normalization = nat_grad_normalization
         self._debug = True
-        self._svd_steps = svd_steps
+        if qr_steps > 0:
+            self._qr_steps = int(qr_steps)
+        else:
+            self._qr_steps = None
 
         # Tensors for learning rate and momentum.  Created in _prepare.
         self._learning_rate_tensor = None
@@ -88,7 +91,12 @@ class RMSpropNatGrad(tf.train.Optimizer):
         tf.summary.scalar('I-W.HW', test_w_norm)
 
     def re_unitarize(self, W):
-        pass
+        # TODO: check this.
+        #_, U, V = tf.svd(W, full_matrices=True, compute_uv=True)
+        # W = tf.matmul(U, tf.transpose(tf.conj(V)))
+        W, _ = tf.qr(W)
+        W = tf.Print(W, [tf.constant(0)], 'step with qr.')
+        return W
 
     def _apply_dense(self, grad, var):
         rms = self.get_slot(var, "rms")
@@ -96,7 +104,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         eps = self.get_slot(var, 'eps')
         # debug_here()
         if 'orthogonal_stiefel' in var.name and 'bias' not in var.name:
-            with tf.variable_scope("orthogonal_step"):
+            with tf.variable_scope("orthogonal_stiefel"):
                 print('Appling an orthogonality preserving step to', var.name)
                 # apply the rms update rule.
                 new_rms = self._decay_tensor * rms + (1. - self._decay_tensor) \
@@ -111,10 +119,15 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 eye = tf.eye(grad_shape[0], dtype=tf.float32)
                 G = grad
                 W = var
+                # Reunitarize after n steps.
+                if self._qr_steps is not None:
+                    W = tf.cond(tf.equal(tf.mod(self._global_step_tensor,
+                                         self._qr_steps), 0),
+                                lambda: self.re_unitarize(W), lambda: W)
                 # A = tf.matmul(tf.transpose(G), W) - tf.matmul(tf.transpose(W), G)
                 A = tf.matmul(G, tf.transpose(W)) - tf.matmul(W, tf.transpose(G))
-                cayleyDenom = eye + (self._learning_rate_tensor/2.0 * A)
-                cayleyNumer = eye - (self._learning_rate_tensor/2.0 * A)
+                cayleyDenom = eye + (self._learning_rate_tensor/2.0) * A
+                cayleyNumer = eye - (self._learning_rate_tensor/2.0) * A
                 C = tf.matmul(tf.matrix_inverse(cayleyDenom), cayleyNumer)
                 W_new = tf.matmul(C, W)
                 if self._debug:
@@ -124,7 +137,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 var_update_op = tf.assign(var, W_new)
                 return tf.group(*[var_update_op, rms_assign_op])
         elif 'unitary_stiefel' in var.name and 'bias' not in var.name:
-            with tf.variable_scope("unitary_step"):
+            with tf.variable_scope("unitary_stiefel"):
                 print('Appling an unitarity preserving step to', var.name)
                 # apply the rms update rule.
                 new_rms = self._decay_tensor * rms + (1. - self._decay_tensor) \
@@ -140,6 +153,13 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 eye = tf.eye(grad_shape[0], dtype=tf.complex64)
                 G = tf.complex(grad[:, :, 0], grad[:, :, 1])
                 W = tf.complex(var[:, :, 0], var[:, :, 1])
+
+                # Reunitarize after n steps.
+                if self._qr_steps is not None:
+                    W = tf.cond(tf.equal(tf.mod(self._global_step_tensor,
+                                         self._qr_steps), 0),
+                                lambda: self.re_unitarize(W), lambda: W)
+
                 A = tf.matmul(G, tf.conj(tf.transpose(W))) \
                     - tf.matmul(W, tf.conj(tf.transpose(G)))
                 # A must be skew symmetric.
@@ -153,9 +173,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
                     self._summary_A(A)
                     self._summary_C(C)
                     self._summary_W(W)
-                # Reunitarize after n steps.
-                #W_new = tf.cond(self._global_step_tensor)
-                #debug_here()
+                # debug_here()
                 W_new_re = tf.real(W_new)
                 W_new_img = tf.imag(W_new)
                 W_array = tf.stack([W_new_re, W_new_img], -1)

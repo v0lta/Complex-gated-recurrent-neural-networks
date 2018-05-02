@@ -66,7 +66,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
          n_units=512, learning_rate=1e-3, decay=0.9,
          batch_size=50, GPU=0, memory=False, adding=True,
          cell_fun=tf.contrib.rnn.LSTMCell, activation=mod_relu,
-         subfolder='exp1', gpu_mem_frac=1.0):
+         subfolder='exp1', gpu_mem_frac=1.0,
+         qr_steps=-1):
     """
     This main function does all the experimentation.
     """
@@ -120,7 +121,7 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
 
         # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
         optimizer = RMSpropNatGrad(learning_rate=learning_rate, decay=decay,
-                                   global_step=global_step)
+                                   global_step=global_step, qr_steps=qr_steps)
         # with tf.variable_scope("gradient_clipping"):
         #     gvs = optimizer.compute_gradients(loss)
         #     # print(gvs)
@@ -147,9 +148,14 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
         + '_' + str(batch_size) + '_' + cell._activation.__name__ \
         + '_' + cell.__class__.__name__
-    if cell.__class__.__name__ is "UnitaryCell" or "UnitaryMemoryCell":
+    # TODO. add statement checking if the nat grad optimizer is there.
+    if cell.__class__.__name__ is "UnitaryCell" or \
+       cell.__class__.__name__ is "UnitaryMemoryCell":
         param_str += '_' + 'arjovski_basis' + '_' + str(cell._arjovski_basis)
         param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
+        param_str += '_' + 'qr_steps' + '_' + str(optimizer._qr_steps)
+        if cell.__class__.__name__ is "UnitaryMemoryCell":
+            param_str += '_' + 'single_gate' + '_' + str(cell._single_gate)
     summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
                                            + param_str, graph=graph)
     print(param_str)
@@ -175,8 +181,10 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             np_loss, summary_mem, np_global_step, _ =  \
                 sess.run(run_lst, feed_dict=feed_dict)
             toc = time.time()
-            print('iteration', i/100, '*10^2', np_loss, 'Baseline', baseline,
-                  'update took:', toc - tic, 's')
+            print('iteration', i/100, '*10^2', np.array2string(np.array(np_loss),
+                                                               precision=4),
+                  'Baseline', np.array2string(np.array(baseline), precision=4),
+                  'update took:', np.array2string(np.array(toc - tic), precision=4), 's')
             train_plot.append([i/100, np_loss])
             summary_writer.add_summary(summary_mem, global_step=np_global_step)
 
@@ -236,6 +244,10 @@ if __name__ == "__main__":
     parser.add_argument('--non_linearity', '-non_linearity', type=str, default='linear',
                         help='Specify the unitary linearity. Options are linar, mod_relu \
                               hirose, moebius, or loop to automatically run all options.')
+    parser.add_argument('--qr_steps', '-qr_steps', type=int, default=int(-1),
+                        help='Specify how often numerical errors should be corrected and \
+                              the state related matrices reorthogonalized, \
+                              -1 means no qr.')
 
     args = parser.parse_args()
     dict = vars(args)
@@ -278,7 +290,8 @@ if __name__ == "__main__":
                       'memory': dict['memory'],
                       'adding': dict['adding'],
                       'subfolder': dict['subfolder'],
-                      'activation': act}
+                      'activation': act,
+                      'qr_steps': dict['qr_steps']}
             main(**kwargs)
     else:
         kwargs = {'cell_fun': dict['model'],
@@ -294,7 +307,8 @@ if __name__ == "__main__":
                   'memory': dict['memory'],
                   'adding': dict['adding'],
                   'subfolder': dict['subfolder'],
-                  'activation': dict['non_linearity']}
+                  'activation': dict['non_linearity'],
+                  'qr_steps': dict['qr_steps']}
 
         # TODO: run multiple times for different sequence lengths.
         main(**kwargs)

@@ -105,3 +105,46 @@ with tf.Session(graph=test_graph, config=config) as sess:
     print('unitary Wn', np_test_W_new)
     # plt.imshow(np.abs(np.matmul(np.transpose(np.conj(npW_new)), npW_new)))
     # plt.show()
+
+# --------------------------------- test tf svd ----------------------------
+svd_graph = tf.Graph()
+with svd_graph.as_default():
+    R = tf.complex(tf.random_uniform([512, 512], dtype=dtype),
+                   tf.random_uniform([512, 512], dtype=dtype))
+    eye = tf.eye(*tf.Tensor.get_shape(R).as_list(), dtype=R.dtype)
+    test_R = eye - tf.matmul(tf.transpose(tf.conj(R)), R)
+    test_R_norm = tf.norm(test_R)
+
+    S, U, V = tf.svd(R, full_matrices=True, compute_uv=True)
+    Ru = tf.matmul(U, tf.transpose(tf.conj(V)))
+    eye = tf.eye(*tf.Tensor.get_shape(Ru).as_list(), dtype=Ru.dtype)
+    test_Ru = eye - tf.matmul(tf.transpose(tf.conj(Ru)), Ru)
+    test_Ru_norm = tf.norm(test_Ru)
+    S_mat = tf.complex(tf.diag(S), tf.zeros_like(tf.diag(S)))
+    R_redone = tf.matmul(U, tf.matmul(S_mat, tf.transpose(tf.conj(V))))
+    R_redo_error = tf.norm(R_redone - R)
+    R_unit_error = tf.norm(Ru - R)
+
+with tf.Session(graph=svd_graph, config=config) as sess:
+    np_R, np_Ru, tr, tru, rr, ru = sess.run([R, Ru, test_R_norm, test_Ru_norm,
+                                             R_redo_error, R_unit_error])
+    print('R   unitary', tr)
+    print('Ru  unitary', tru)
+    print('R   reconst', rr)
+    print('Ru  reconst', ru)
+
+
+# --------------------------------- test orthogonal initializer -----------
+otg = tf.Graph()
+with otg.as_default():
+    test_var = tf.get_variable('orth_test', [128, 128], dtype=dtype,
+                               initializer=tf.orthogonal_initializer())
+    init_op = tf.global_variables_initializer()
+
+with tf.Session(graph=otg, config=config):
+    init_op.run()
+    test_np = test_var.eval()
+
+eye = np.eye(128)
+test = np.linalg.norm(eye - np.matmul(np.transpose(test_np), test_np))
+print(test)

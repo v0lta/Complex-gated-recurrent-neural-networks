@@ -369,6 +369,7 @@ class UnitaryMemoryCell(UnitaryCell):
         self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
         self._single_gate = True
+        self._orthogonal_gate = False
         self._arjovski_basis = False
 
     def complex_memory_gate(self, h, x, scope, reuse, bias_init=0.0):
@@ -405,7 +406,6 @@ class UnitaryMemoryCell(UnitaryCell):
             h_(t+1) = U_t*f(h_t) + V_t x_t
         """
         with tf.variable_scope("UnitaryMemoryCell"):
-
             last_out, last_h = state
             if self._arjovski_basis:
                 with tf.variable_scope("arjovski_basis", reuse=self._reuse):
@@ -422,7 +422,7 @@ class UnitaryMemoryCell(UnitaryCell):
                     varU = tf.get_variable("recurrent_U",
                                            shape=[self._num_units, self._num_units, 2],
                                            dtype=tf.float32,
-                                           initializer=unitary_init)
+                                           initializer=arjovski_init)
                     U = tf.complex(varU[:, :, 0], varU[:, :, 1])
                 Uh = tf.matmul(last_h, U)
 
@@ -448,7 +448,9 @@ class UnitaryMemoryCell(UnitaryCell):
             else:
                 ig, fg = self.single_memory_gate(Uh, Vx,
                                                  scope='orthogonal_stiefel',
-                                                 reuse=self._reuse)
+                                                 # scope='single_gate',
+                                                 reuse=self._reuse,
+                                                 bias_init=1.0)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
             ht = self._activation(pre_h, reuse=self._reuse)
 
