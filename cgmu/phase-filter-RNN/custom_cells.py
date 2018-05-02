@@ -233,7 +233,8 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
         return tf.matmul(x, A) + b
 
 
-def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
+def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0,
+                             unitary=False, orthogonal=False):
     """
     Compute Ax + b.
     Input: x
@@ -241,18 +242,33 @@ def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     # debug_here()
-    with tf.variable_scope("complex_linear_" + scope, reuse=reuse):
-        Ar = tf.get_variable('Ar', in_shape[-1:] + [num_proj], dtype=tf.float32,
-                             initializer=tf.orthogonal_initializer())
-        Ai = tf.get_variable('Ai', in_shape[-1:] + [num_proj], dtype=tf.float32,
-                             initializer=tf.orthogonal_initializer())
-        br = tf.get_variable('bias_r', [num_proj], dtype=tf.float32,
-                             initializer=tf.constant_initializer(bias_init))
-        bi = tf.get_variable('bias_i', [num_proj], dtype=tf.float32,
-                             initializer=tf.constant_initializer(bias_init))
-        A = tf.complex(Ar, Ai)
-        b = tf.complex(br, bi)
-    with tf.variable_scope('complex_linear_layer'):
+    with tf.variable_scope(scope, reuse=reuse):
+        if unitary:
+            with tf.variable_scope('unitary_stiefel', reuse=reuse):
+                varU = tf.get_variable('gate_U',
+                                       shape=in_shape[-1:] + [num_proj] + [2],
+                                       dtype=tf.float32,
+                                       initializer=arjovski_init)
+                A = tf.complex(varU[:, :, 0], varU[:, :, 1])
+        elif orthogonal:
+            with tf.variable_scope('orthogonal_stiefel', reuse=reuse):
+                Ar = tf.get_variable('gate_Ur', in_shape[-1:] + [num_proj],
+                                     dtype=tf.float32,
+                                     initializer=tf.orthogonal_initializer())
+                Ai = tf.get_variable('gate_Ui', in_shape[-1:] + [num_proj],
+                                     dtype=tf.float32,
+                                     initializer=tf.orthogonal_initializer())
+                A = tf.complex(Ar, Ai)
+        else:
+            varU = tf.get_variable('gate_A',
+                                   shape=in_shape[-1:] + [num_proj] + [2],
+                                   dtype=tf.float32,
+                                   initializer=tf.glorot_uniform_initializer())
+            A = tf.complex(varU[:, :, 0], varU[:, :, 1])
+
+        varb = tf.get_variable('bias_g', [num_proj] + [2], dtype=tf.float32,
+                               initializer=tf.constant_initializer(bias_init))
+        b = tf.complex(varb[:, 0], varb[:, 1])
         return tf.matmul(x, A) + b
 
 
@@ -391,8 +407,10 @@ class UnitaryMemoryCell(UnitaryCell):
         """
         with tf.variable_scope(scope, reuse):
             gh = complex_matmul_plus_bias(h, self._num_units,
-                                          scope='gh', reuse=reuse, bias_init=bias_init)
-            gx = complex_matmul_plus_bias(h, self._num_units,
+                                          scope='gh',
+                                          reuse=reuse, bias_init=bias_init,
+                                          unitary=False, orthogonal=True)
+            gx = complex_matmul_plus_bias(x, self._num_units,
                                           scope='gx', reuse=reuse, bias_init=bias_init)
             g = gh + gx
             ig = tf.nn.sigmoid(tf.real(g))
@@ -447,8 +465,7 @@ class UnitaryMemoryCell(UnitaryCell):
                                               reuse=self._reuse, bias_init=1.0)
             else:
                 ig, fg = self.single_memory_gate(Uh, Vx,
-                                                 scope='orthogonal_stiefel',
-                                                 # scope='single_gate',
+                                                 scope='single_gate',
                                                  reuse=self._reuse,
                                                  bias_init=1.0)
             pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
