@@ -273,6 +273,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     dict = vars(args)
     act_loop = False
+    prob_loop = False
+    time_loop = False
     # find and replace string arguments.
     for key in dict:
         if dict[key] == "False":
