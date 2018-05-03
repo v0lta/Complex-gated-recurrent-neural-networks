@@ -1,3 +1,5 @@
+# pylint: disable=E722
+
 # Recreation of the Montreal adding problem experiments from Arjovski et al.
 # Working with Tensorflow 1.3
 import os
@@ -18,6 +20,17 @@ from custom_optimizers import RMSpropNatGrad
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 
 def generate_data_adding(time_steps, n_data):
@@ -62,7 +75,7 @@ def generate_data_memory(time_steps, n_data, n_sequence):
     return x, y
 
 
-def main(time_steps=100, n_train=int(2e7), n_test=int(1e4),
+def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
          n_units=512, learning_rate=1e-3, decay=0.9,
          batch_size=50, GPU=0, memory=False, adding=True,
          cell_fun=tf.contrib.rnn.LSTMCell, activation=mod_relu,
@@ -149,7 +162,7 @@ def main(time_steps=100, n_train=int(2e7), n_test=int(1e4),
         problem = 'memory'
     if adding:
         problem = 'adding'
-    param_str = '_' + problem + '_' + str(time_steps) + '_' + str(n_train) \
+    param_str = problem + '_' + str(time_steps) + '_' + str(n_train) \
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
         + '_' + str(batch_size)
     # TODO. add statement checking if the nat grad optimizer is there.
@@ -158,9 +171,11 @@ def main(time_steps=100, n_train=int(2e7), n_test=int(1e4),
         param_str += '_' + cell.to_string()
         param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
         param_str += '_' + 'qr_steps' + '_' + str(optimizer._qr_steps)
+    else:
+        param_str += '_' + str(cell.__class__.__name__)
     summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
-                                           + param_str, graph=graph)
-    print(param_str)
+                                           + '_' + param_str, graph=graph)
+    print(bcolors.OKGREEN + param_str + bcolors.ENDC)
 
     # ------------------------- and run it! ---------------------------------
     train_plot = []
@@ -221,11 +236,11 @@ if __name__ == "__main__":
                         help='Model name: LSTM, UNN, GUNN')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
                         help='Copying Problem delay')
-    parser.add_argument('--n_train', '-n_train', type=int, default=int(2e6),
+    parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
                         help='training iteration number')
     parser.add_argument('--n_test', '-n_test', type=int, default=int(1e4),
                         help='training iteration number')
-    parser.add_argument('--n_units', '-n_units', type=int, default=512,
+    parser.add_argument('--n_units', '-n_units', type=int, default=128,
                         help='hidden layer size')
     parser.add_argument('--learning_rate', '-learning_rate', type=float, default=1e-3,
                         help='graident descent step size')
@@ -259,48 +274,87 @@ if __name__ == "__main__":
     dict = vars(args)
     act_loop = False
     # find and replace string arguments.
-    for i in dict:
-        if (dict[i] == "False"):
-            dict[i] = False
-        elif dict[i] == "True":
-            dict[i] = True
-        elif dict[i] == "LSTM":
-            dict[i] = tf.contrib.rnn.LSTMCell
-        elif dict[i] == "UNN":
-            dict[i] = cc.UnitaryCell
-        elif dict[i] == "GUNN":
-            dict[i] = cc.UnitaryMemoryCell
-        elif dict[i] == "linear":
-            dict[i] = linear
-        elif dict[i] == "mod_relu":
-            dict[i] = mod_relu
-        elif dict[i] == "hirose":
-            dict[i] = hirose
-        elif dict[i] == "moebius":
-            dict[i] = moebius
-        elif dict[i] == 'loop':
-            act_loop = True
+    for key in dict:
+        if dict[key] == "False":
+            dict[key] = False
+        elif dict[key] == "True":
+            dict[key] = True
+        elif dict[key] == "LSTM":
+            dict[key] = tf.contrib.rnn.LSTMCell
+        elif dict[key] == "UNN":
+            dict[key] = cc.UnitaryCell
+        elif dict[key] == "GUNN":
+            dict[key] = cc.UnitaryMemoryCell
+        elif dict[key] == "linear":
+            dict[key] = linear
+        elif dict[key] == "mod_relu":
+            dict[key] = mod_relu
+        elif dict[key] == "hirose":
+            dict[key] = hirose
+        elif dict[key] == "moebius":
+            dict[key] = moebius
+        elif dict[key] == 'loop':
+            if key == 'non_linearity':
+                act_loop = True
+            if key == 'adding' or key == 'memory':
+                prob_loop = True
+        elif dict[key] == -1:
+            if key == 'time_steps':
+                time_loop = True
 
-    if act_loop:
+    if act_loop and prob_loop and time_loop:
+        for time_it in [100, 250, 500, 1000]:
+            for problem in ['adding', 'memory']:
+                if problem == 'adding':
+                    adding_bool = True
+                    memory_bool = False
+                if problem == 'memory':
+                    adding_bool = False
+                    memory_bool = True
+                for act in [linear, mod_relu, hirose, moebius]:
+                    kwargs = {'cell_fun': dict['model'],
+                              'time_steps': time_it,
+                              'n_train': dict['n_train'],
+                              'n_test': dict['n_test'],
+                              'n_units': dict['n_units'],
+                              'learning_rate': dict['learning_rate'],
+                              'decay': dict['decay'],
+                              'batch_size': dict['batch_size'],
+                              'gpu_mem_frac': dict['gpu_mem_frac'],
+                              'GPU': dict['GPU'],
+                              'memory': memory_bool,
+                              'adding': adding_bool,
+                              'subfolder': dict['subfolder'],
+                              'activation': act,
+                              'qr_steps': dict['qr_steps'],
+                              'orthogonal': dict['orthogonal'],
+                              'unitary': dict['unitary']}
+                    try:
+                        main(**kwargs)
+                    except:
+                        print(bcolors.WARNING + 'Experiment', act, problem, time_it,
+                              'diverged' + bcolors.ENDC)
+    elif act_loop and prob_loop:
         for act in [linear, mod_relu, hirose, moebius]:
-            kwargs = {'cell_fun': dict['model'],
-                      'time_steps': dict['time_steps'],
-                      'n_train': dict['n_train'],
-                      'n_test': dict['n_test'],
-                      'n_units': dict['n_units'],
-                      'learning_rate': dict['learning_rate'],
-                      'decay': dict['decay'],
-                      'batch_size': dict['batch_size'],
-                      'gpu_mem_frac': dict['gpu_mem_frac'],
-                      'GPU': dict['GPU'],
-                      'memory': dict['memory'],
-                      'adding': dict['adding'],
-                      'subfolder': dict['subfolder'],
-                      'activation': act,
-                      'qr_steps': dict['qr_steps'],
-                      'orthogonal': dict['orthogonal'],
-                      'unitary': dict['unitary']}
-            main(**kwargs)
+            for problem in ['adding', 'memory']:
+                kwargs = {'cell_fun': dict['model'],
+                          'time_steps': dict['time_steps'],
+                          'n_train': dict['n_train'],
+                          'n_test': dict['n_test'],
+                          'n_units': dict['n_units'],
+                          'learning_rate': dict['learning_rate'],
+                          'decay': dict['decay'],
+                          'batch_size': dict['batch_size'],
+                          'gpu_mem_frac': dict['gpu_mem_frac'],
+                          'GPU': dict['GPU'],
+                          'memory': memory_bool,
+                          'adding': adding_bool,
+                          'subfolder': dict['subfolder'],
+                          'activation': act,
+                          'qr_steps': dict['qr_steps'],
+                          'orthogonal': dict['orthogonal'],
+                          'unitary': dict['unitary']}
+                main(**kwargs)
     else:
         kwargs = {'cell_fun': dict['model'],
                   'time_steps': dict['time_steps'],

@@ -47,7 +47,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         self._momentum_tensor = None
         self._epsilon_tensor = None
 
-        print("training params:", self._learning_rate, self._decay, self._momentum)
+        # print("training params:", self._learning_rate, self._decay, self._momentum)
 
     def _create_slots(self, var_list):
         """ Set up rmsprop slots for all variables."""
@@ -104,7 +104,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         eps = self.get_slot(var, 'eps')
         # debug_here()
         if 'orthogonal_stiefel' in var.name and 'bias' not in var.name:
-            with tf.variable_scope("orthogonal_stiefel"):
+            with tf.variable_scope("orthogonal_update"):
                 print('Appling an orthogonality preserving step to', var.name)
                 # apply the rms update rule.
                 new_rms = self._decay_tensor * rms + (1. - self._decay_tensor) \
@@ -131,13 +131,13 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 C = tf.matmul(tf.matrix_inverse(cayleyDenom), cayleyNumer)
                 W_new = tf.matmul(C, W)
                 if self._debug:
-                    self._summary_A(A)
+                    # self._summary_A(A)
                     self._summary_C(C)
                     self._summary_W(W)
                 var_update_op = tf.assign(var, W_new)
                 return tf.group(*[var_update_op, rms_assign_op])
         elif 'unitary_stiefel' in var.name and 'bias' not in var.name:
-            with tf.variable_scope("unitary_stiefel"):
+            with tf.variable_scope("unitary_update"):
                 print('Appling an unitarity preserving step to', var.name)
                 # apply the rms update rule.
                 new_rms = self._decay_tensor * rms + (1. - self._decay_tensor) \
@@ -170,7 +170,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 C = tf.matmul(tf.matrix_inverse(cayleyDenom), cayleyNumer)
                 W_new = tf.matmul(C, W)
                 if self._debug:
-                    self._summary_A(A)
+                    # self._summary_A(A)
                     self._summary_C(C)
                     self._summary_W(W)
                 # debug_here()
@@ -187,7 +187,6 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 #     unitary_assertion = tf.Assert(tf.less(test_w_norm, 1e-4),
                 #                                   [test_w_norm])
                 #     return tf.group(*[var_update_op, rms_assign_op, unitary_assertion])
-
         else:
             # do the usual RMSprop update
             if 0:

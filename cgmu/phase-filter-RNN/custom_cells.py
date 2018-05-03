@@ -13,6 +13,75 @@ debug_here = Tracer()
 _URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
 
 
+def unitary_init(shape, dtype=tf.float32, partition_info=None):
+    limit = np.sqrt(6 / (shape[0] + shape[1]))
+    rand_r = np.random.uniform(-limit, limit, shape[0:2])
+    rand_i = np.random.uniform(-limit, limit, shape[0:2])
+    crand = rand_r + 1j*rand_i
+    debug_here()
+    u, s, vh = np.linalg.svd(crand)
+    # use u and vg to create a unitary matrix:
+    debug_here()
+    unitary = np.matmul(u, np.transpose(np.conj(vh)))
+
+    test_eye = np.matmul(np.transpose(np.conj(unitary)), unitary)
+    print('I - Wi.H Wi', np.linalg.norm(test_eye) - unitary)
+    # test
+    # plt.imshow(np.abs(np.matmul(unitary, np.transpose(np.conj(unitary))))); plt.show()
+    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
+    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
+    # debug_here()
+    return tf.constant(stacked, dtype)
+
+
+def arjovski_init(shape, dtype=tf.float32, partition_info=None):
+    print("Arjosky basis initialization.")
+    assert shape[0] == shape[1]
+    omega1 = np.random.uniform(-np.pi, np.pi, shape[0])
+    omega2 = np.random.uniform(-np.pi, np.pi, shape[0])
+    omega3 = np.random.uniform(-np.pi, np.pi, shape[0])
+
+    vr1 = np.random.uniform(-1, 1, [shape[0], 1])
+    vi1 = np.random.uniform(-1, 1, [shape[0], 1])
+    v1 = vr1 + 1j*vi1
+    vr2 = np.random.uniform(-1, 1, [shape[0], 1])
+    vi2 = np.random.uniform(-1, 1, [shape[0], 1])
+    v2 = vr2 + 1j*vi2
+
+    D1 = np.diag(np.exp(1j*omega1))
+    D2 = np.diag(np.exp(1j*omega2))
+    D3 = np.diag(np.exp(1j*omega3))
+
+    vvh1 = np.matmul(v1, np.transpose(np.conj(v1)))
+    beta1 = 2./np.matmul(np.transpose(np.conj(v1)), v1)
+    R1 = np.eye(shape[0]) - beta1*vvh1
+
+    vvh2 = np.matmul(v2, np.transpose(np.conj(v2)))
+    beta2 = 2./np.matmul(np.transpose(np.conj(v2)), v2)
+    R2 = np.eye(shape[0]) - beta2*vvh2
+
+    perm = np.random.permutation(np.eye(shape[0], dtype=np.float32)) \
+        + 1j*np.zeros(shape[0])
+
+    fft = np.fft.fft
+    ifft = np.fft.ifft
+
+    step1 = fft(D1)
+    step2 = np.matmul(R1, step1)
+    step3 = np.matmul(perm, step2)
+    step4 = np.matmul(D2, step3)
+    step5 = ifft(step4)
+    step6 = np.matmul(R2, step5)
+    unitary = np.matmul(D3, step6)
+    eye_test = np.matmul(np.transpose(np.conj(unitary)), unitary)
+    unitary_test = np.linalg.norm(np.eye(shape[0]) - eye_test)
+    print('I - Wi.H Wi', unitary_test, unitary.dtype)
+    assert unitary_test < 1e-10, "Unitary initialization not unitary enough."
+    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
+    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
+    return tf.constant(stacked, dtype)
+
+
 class URNNStateTuple(_URNNStateTuple):
     """Tuple used by LSTM Cells for `state_size`, `zero_state`, and output state.
        Stores two elements: `(c, h)`, in that order.
@@ -123,6 +192,16 @@ def moebius(z, scope='', reuse=None):
                          tf.multiply(c, z) + d)
 
 
+def modSigmoid(z, reuse=None):
+    """
+    ModSigmoid implementation.
+    """
+    with tf.variable_scope('modSigmoid'):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32)
+        pre_act = alpha * tf.real(z) + (1 - alpha)*tf.imag(z)
+        return tf.nn.sigmoid(pre_act)
+
+
 def linear(z, scope='', reuse=None, coupled=False):
     return z
 
@@ -215,16 +294,22 @@ def permutation(h, state_size, no, reuse):
     return tf.matmul(h, P)
 
 
-def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
+def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0, orthogonal=False):
     """
     Compute Ax + b.
     Input: x
     Returns: Ax + b
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
-    with tf.variable_scope("linear_" + scope, reuse=reuse):
-        A = tf.get_variable('A', [in_shape[-1], num_proj], dtype=tf.float32,
-                            initializer=tf.glorot_uniform_initializer())
+    with tf.variable_scope(scope, reuse=reuse):
+        if orthogonal:
+            with tf.variable_scope('orthogonal_stiefel', reuse=reuse):
+                A = tf.get_variable('gate_O', [in_shape[-1], num_proj],
+                                    dtype=tf.float32,
+                                    initializer=tf.orthogonal_initializer())
+        else:
+            A = tf.get_variable('A', [in_shape[-1], num_proj], dtype=tf.float32,
+                                initializer=tf.glorot_uniform_initializer())
         b = tf.get_variable('bias', [num_proj], dtype=tf.float32,
                             initializer=tf.constant_initializer(bias_init))
         print('Initializing', tf.contrib.framework.get_name_scope(), 'bias to',
@@ -234,7 +319,8 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0):
 
 
 def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0,
-                             unitary=False, orthogonal=False):
+                             unitary=False, orthogonal=False,
+                             unitary_init=arjovski_init):
     """
     Compute Ax + b.
     Input: x
@@ -248,7 +334,7 @@ def complex_matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0,
                 varU = tf.get_variable('gate_U',
                                        shape=in_shape[-1:] + [num_proj] + [2],
                                        dtype=tf.float32,
-                                       initializer=arjovski_init)
+                                       initializer=unitary_init)
                 A = tf.complex(varU[:, :, 0], varU[:, :, 1])
         elif orthogonal:
             with tf.variable_scope('orthogonal_stiefel', reuse=reuse):
@@ -468,16 +554,26 @@ class UnitaryMemoryCell(UnitaryCell):
 
             # Deal with the inputs
             # Mapping inputs into the complex plane, by folding:
-            Vxr = matmul_plus_bias(inputs, self._num_units,
-                                   scope='real', reuse=self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units,
-                                   scope='imag', reuse=self._reuse)
-            Vx = tf.complex(Vxr, Vxi)
+            if not self._single_gate:
+                Vxr = matmul_plus_bias(inputs, self._num_units,
+                                       scope='real', reuse=self._reuse,
+                                       orthogonal=self._orthogonal_gate)
+                Vxi = matmul_plus_bias(inputs, self._num_units,
+                                       scope='imag', reuse=self._reuse,
+                                       orthogonal=self._orthogonal_gate)
+                Vx = tf.complex(Vxr, Vxi)
+            else:
+                x = tf.complex(inputs, tf.zeros_like(inputs))
+                Vx = complex_matmul_plus_bias(x, self._num_units,
+                                              scope='input_weights',
+                                              reuse=self._reuse,
+                                              unitary=True,
+                                              unitary_init=unitary_init)
             # By leaving the real part intact.
             # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
             # By FFT.
             # TODO.
-            # By Hilbert transform.
+            # ################# Hilbert transform. ####################
             # TODO.
 
             if not self._single_gate:
@@ -509,68 +605,3 @@ class UnitaryMemoryCell(UnitaryCell):
         return output, newstate
 
 
-def unitary_init(shape, dtype=tf.float32, partition_info=None):
-    limit = np.sqrt(6 / (shape[0] + shape[1]))
-    rand_r = np.random.uniform(-limit, limit, shape[0:2])
-    rand_i = np.random.uniform(-limit, limit, shape[0:2])
-    crand = rand_r + 1j*rand_i
-    u, s, vh = np.linalg.svd(crand)
-    # use u and vg to create a unitary matrix:
-    unitary = np.matmul(u, np.transpose(np.conj(vh)))
-
-    test_eye = np.matmul(np.transpose(np.conj(unitary)), unitary)
-    print('I - Wi.H Wi', np.linalg.norm(test_eye) - unitary)
-    # test
-    # plt.imshow(np.abs(np.matmul(unitary, np.transpose(np.conj(unitary))))); plt.show()
-    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
-    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
-    # debug_here()
-    return tf.constant(stacked, dtype)
-
-
-def arjovski_init(shape, dtype=tf.float32, partition_info=None):
-    print("Arjosky basis initialization.")
-    assert shape[0] == shape[1]
-    omega1 = np.random.uniform(-np.pi, np.pi, shape[0])
-    omega2 = np.random.uniform(-np.pi, np.pi, shape[0])
-    omega3 = np.random.uniform(-np.pi, np.pi, shape[0])
-
-    vr1 = np.random.uniform(-1, 1, [shape[0], 1])
-    vi1 = np.random.uniform(-1, 1, [shape[0], 1])
-    v1 = vr1 + 1j*vi1
-    vr2 = np.random.uniform(-1, 1, [shape[0], 1])
-    vi2 = np.random.uniform(-1, 1, [shape[0], 1])
-    v2 = vr2 + 1j*vi2
-
-    D1 = np.diag(np.exp(1j*omega1))
-    D2 = np.diag(np.exp(1j*omega2))
-    D3 = np.diag(np.exp(1j*omega3))
-
-    vvh1 = np.matmul(v1, np.transpose(np.conj(v1)))
-    beta1 = 2./np.matmul(np.transpose(np.conj(v1)), v1)
-    R1 = np.eye(shape[0]) - beta1*vvh1
-
-    vvh2 = np.matmul(v2, np.transpose(np.conj(v2)))
-    beta2 = 2./np.matmul(np.transpose(np.conj(v2)), v2)
-    R2 = np.eye(shape[0]) - beta2*vvh2
-
-    perm = np.random.permutation(np.eye(shape[0], dtype=np.float32)) \
-        + 1j*np.zeros(shape[0])
-
-    fft = np.fft.fft
-    ifft = np.fft.ifft
-
-    step1 = fft(D1)
-    step2 = np.matmul(R1, step1)
-    step3 = np.matmul(perm, step2)
-    step4 = np.matmul(D2, step3)
-    step5 = ifft(step4)
-    step6 = np.matmul(R2, step5)
-    unitary = np.matmul(D3, step6)
-    eye_test = np.matmul(np.transpose(np.conj(unitary)), unitary)
-    unitary_test = np.linalg.norm(np.eye(shape[0]) - eye_test)
-    print('I - Wi.H Wi', unitary_test, unitary.dtype)
-    assert unitary_test < 1e-10, "Unitary initialization not unitary enough."
-    stacked = np.stack([np.real(unitary), np.imag(unitary)], -1)
-    assert stacked.shape == tuple(shape), "Unitary initialization shape mismatch."
-    return tf.constant(stacked, dtype)
