@@ -33,6 +33,22 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
+def compute_parameter_total(trainable_variables):
+    total_parameters = 0
+    for variable in trainable_variables:
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        print('var_name', variable.name, 'shape', shape, 'dim', len(shape))
+        variable_parameters = 1
+        for dim in shape:
+            # print(dim)
+            variable_parameters *= dim.value
+        print('parameters', variable_parameters)
+        total_parameters += variable_parameters
+    print('total:', total_parameters)
+    return total_parameters
+
+
 def generate_data_adding(time_steps, n_data):
     """
     Generate data for the adding problem.
@@ -116,6 +132,9 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             activation=activation, orthogonal_gate=orthogonal,
                             unitary_gate=unitary)
+        elif cell_fun.__name__ == 'ComplexGatedRecurrentUnit':
+            cell = cell_fun(num_units=n_units, num_proj=output_size,
+                            activation=activation)
         else:
             cell = cell_fun(num_units=n_units, num_proj=output_size)
 
@@ -140,16 +159,17 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
         optimizer = RMSpropNatGrad(learning_rate=learning_rate, decay=decay,
                                    global_step=global_step, qr_steps=qr_steps)
-        # with tf.variable_scope("gradient_clipping"):
-        #     gvs = optimizer.compute_gradients(loss)
-        #     # print(gvs)
-        #     capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-        #     # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
-        #     train_op = optimizer.apply_gradients(capped_gvs)
+        with tf.variable_scope("gradient_clipping"):
+            gvs = optimizer.compute_gradients(loss)
+            # print(gvs)
+            capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+            # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
+            train_op = optimizer.apply_gradients(capped_gvs)
         # debug_here()
         train_op = optimizer.minimize(loss, global_step=global_step)
         init_op = tf.global_variables_initializer()
         summary_op = tf.summary.merge_all()
+        parameter_total = compute_parameter_total(tf.trainable_variables())
 
     gpu_options = tf.GPUOptions(visible_device_list=str(GPU),
                                 per_process_gpu_memory_fraction=gpu_mem_frac)
@@ -167,12 +187,17 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
         + '_' + str(batch_size)
     # TODO. add statement checking if the nat grad optimizer is there.
     if cell.__class__.__name__ is "UnitaryCell" or \
-       cell.__class__.__name__ is "UnitaryMemoryCell":
+       cell.__class__.__name__ is "UnitaryMemoryCell" or \
+       cell.__class__.__name__ is "ComplexGatedRecurrentUnit":
         param_str += '_' + cell.to_string()
         param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
         param_str += '_' + 'qr_steps' + '_' + str(optimizer._qr_steps)
     else:
         param_str += '_' + str(cell.__class__.__name__)
+
+    # add parameter_total:
+    param_str += '_' + 'pt' + '_' + str(parameter_total)
+
     summary_writer = tf.summary.FileWriter('logs' + '/' + subfolder + '/' + time_str
                                            + '_' + param_str, graph=graph)
     print(bcolors.OKGREEN + param_str + bcolors.ENDC)
@@ -233,7 +258,7 @@ if __name__ == "__main__":
         description="Run the montreal implementation \
          of the hochreiter RNN evaluation metrics.")
     parser.add_argument("--model", default='EUNN',
-                        help='Model name: LSTM, UNN, GUNN')
+                        help='Model name: LSTM, UNN, GUNN, CGRU')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
                         help='Copying Problem delay')
     parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
@@ -287,6 +312,8 @@ if __name__ == "__main__":
             dict[key] = cc.UnitaryCell
         elif dict[key] == "GUNN":
             dict[key] = cc.UnitaryMemoryCell
+        elif dict[key] == "CGRU":
+            dict[key] = cc.ComplexGatedRecurrentUnit
         elif dict[key] == "linear":
             dict[key] = linear
         elif dict[key] == "mod_relu":
@@ -336,6 +363,9 @@ if __name__ == "__main__":
                     except:
                         print(bcolors.WARNING + 'Experiment', act, problem, time_it,
                               'diverged' + bcolors.ENDC)
+                    if dict['model'] == tf.contrib.rnn.LSTMCell:
+                        break
+
     elif act_loop and prob_loop:
         for act in [linear, mod_relu, hirose, moebius]:
             for problem in ['adding', 'memory']:

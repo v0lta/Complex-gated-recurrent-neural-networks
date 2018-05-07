@@ -13,6 +13,22 @@ debug_here = Tracer()
 _URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
 
 
+class URNNStateTuple(_URNNStateTuple):
+    """Tuple used by URNN Cells for `state_size`, `zero_state`, and output state.
+       Stores two elements: `(c, h)`, in that order.
+       Only used when `state_is_tuple=True`.
+    """
+    slots__ = ()
+
+    @property
+    def dtype(self):
+        (c, h) = self
+        if c.dtype != h.dtype:
+            raise TypeError("Inconsistent internal state: %s vs %s" %
+                            (str(c.dtype), str(h.dtype)))
+        return c.dtype
+
+
 def unitary_init(shape, dtype=tf.float32, partition_info=None):
     limit = np.sqrt(6 / (shape[0] + shape[1]))
     rand_r = np.random.uniform(-limit, limit, shape[0:2])
@@ -82,22 +98,6 @@ def arjovski_init(shape, dtype=tf.float32, partition_info=None):
     return tf.constant(stacked, dtype)
 
 
-class URNNStateTuple(_URNNStateTuple):
-    """Tuple used by LSTM Cells for `state_size`, `zero_state`, and output state.
-       Stores two elements: `(c, h)`, in that order.
-       Only used when `state_is_tuple=True`.
-    """
-    slots__ = ()
-
-    @property
-    def dtype(self):
-        (c, h) = self
-        if c.dtype != h.dtype:
-            raise TypeError("Inconsistent internal state: %s vs %s" %
-                            (str(c.dtype), str(h.dtype)))
-        return c.dtype
-
-
 def mod_relu(z, scope='', reuse=None):
     """
         Implementation of the modRelu from Arjovski et al.
@@ -126,10 +126,11 @@ def mod_sigmoid(z, reuse=None):
     """
     ModSigmoid implementation.
     """
-    with tf.variable_scope('modSigmoid', reuse=reuse):
+    with tf.variable_scope('mod_sigmoid', reuse=reuse):
         alpha = tf.get_variable('alpha', [], dtype=tf.float32,
-                                initializer=tf.constant_initializer(0.5))
-        pre_act = tf.real(z) + (1 - alpha)*tf.imag(z)
+                                initializer=tf.constant_initializer(0.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        pre_act = alpha_norm * tf.real(z) + (1 - alpha_norm)*tf.imag(z)
         return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
 
 
@@ -422,51 +423,51 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
             Evaluate the RNN cell. Using
             h_(t+1) = U_t*f(h_t) + V_t x_t
         """
-        with tf.variable_scope("UnitaryCell"):
-            last_out, last_h = state
-            if self._arjovski_basis:
-                with tf.variable_scope("arjovski_basis", reuse=self._reuse):
-                    step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
-                    step2 = tf.spectral.fft(step1)
-                    step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
-                    step4 = permutation(step3, self._num_units, 0, self._reuse)
-                    step5 = diag_mul(step4, self._num_units, 1, self._reuse)
-                    step6 = tf.spectral.ifft(step5)
-                    step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
-                    Uh = diag_mul(step7, self._num_units, 2, self._reuse)
-            else:
-                with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
-                    varU = tf.get_variable("recurrent_U",
-                                           shape=[self._num_units, self._num_units, 2],
-                                           dtype=tf.float32,
-                                           initializer=arjovski_init)
-                    U = tf.complex(varU[:, :, 0], varU[:, :, 1])
-                    # U = tf.Print(U, [U])
-                Uh = tf.matmul(last_h, U)
+        # with tf.variable_scope("UnitaryCell"):
+        last_out, last_h = state
+        if self._arjovski_basis:
+            with tf.variable_scope("arjovski_basis", reuse=self._reuse):
+                step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+                step2 = tf.spectral.fft(step1)
+                step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
+                step4 = permutation(step3, self._num_units, 0, self._reuse)
+                step5 = diag_mul(step4, self._num_units, 1, self._reuse)
+                step6 = tf.spectral.ifft(step5)
+                step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
+                Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+        else:
+            with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+                varU = tf.get_variable("recurrent_U",
+                                       shape=[self._num_units, self._num_units, 2],
+                                       dtype=tf.float32,
+                                       initializer=arjovski_init)
+                U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+                # U = tf.Print(U, [U])
+            Uh = tf.matmul(last_h, U)
 
-            # Deal with the inputs
-            # Mapping inputs into the complex plane, by folding:
-            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-            Vx = tf.complex(Vxr, Vxi)
-            # By leaving the real part intact.
-            # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
+        # Deal with the inputs
+        # Mapping inputs into the complex plane, by folding:
+        Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+        Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+        Vx = tf.complex(Vxr, Vxi)
+        # By leaving the real part intact.
+        # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
 
-            # By FFT.
-            # TODO.
-            zt = Uh + Vx
-            ht = self._activation(zt, '', self._reuse)
+        # By FFT.
+        # TODO.
+        zt = Uh + Vx
+        ht = self._activation(zt, '', self._reuse)
 
-            # Mapping the state back onto the real axis.
-            # By mapping.
+        # Mapping the state back onto the real axis.
+        # By mapping.
 
-            output = C_to_R(ht, self._output_size, reuse=self._reuse)
+        output = C_to_R(ht, self._output_size, reuse=self._reuse)
 
-            # By fft.
-            # TODO.
-            # debug_here()
-            # print('dbg')
-            newstate = URNNStateTuple(output, ht)
+        # By fft.
+        # TODO.
+        # debug_here()
+        # print('dbg')
+        newstate = URNNStateTuple(output, ht)
         return output, newstate
 
 
@@ -502,65 +503,156 @@ class UnitaryMemoryCell(UnitaryCell):
         with tf.variable_scope('forget_gate'):
             gfx = complex_matmul(x, self._num_units, 'gfx', reuse=self._reuse, bias=True,
                                  bias_init=bias_init)
-            # gfh = complex_matmul(h, self._num_units, 'gfh', reuse=self._reuse, bias=False,
-            #                     orthogonal=False)
-        return mod_sigmoid(gfx)  # + gfh)
+            gfh = complex_matmul(h, self._num_units, 'gfh', reuse=self._reuse, bias=False,
+                                 orthogonal=True)
+        return mod_sigmoid(gfx + gfh)
 
     def call(self, inputs, state):
         """
             Evaluate the RNN cell. Using
             h_(t+1) = U_t*f(h_t) + V_t x_t
         """
-        with tf.variable_scope("UnitaryMemoryCell"):
-            last_out, last_h = state
-            if self._arjovski_basis:
-                with tf.variable_scope("arjovski_basis", reuse=self._reuse):
-                    step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
-                    step2 = tf.spectral.fft(step1)
-                    step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
-                    step4 = permutation(step3, self._num_units, 0, self._reuse)
-                    step5 = diag_mul(step4, self._num_units, 1, self._reuse)
-                    step6 = tf.spectral.ifft(step5)
-                    step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
-                    Uh = diag_mul(step7, self._num_units, 2, self._reuse)
-            else:
-                with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
-                    varU = tf.get_variable("recurrent_U",
-                                           shape=[self._num_units, self._num_units, 2],
-                                           dtype=tf.float32,
-                                           initializer=arjovski_init)
-                    U = tf.complex(varU[:, :, 0], varU[:, :, 1])
-                Uh = tf.matmul(last_h, U)
+        #with tf.variable_scope("UnitaryMemoryCell"):
+        last_out, last_h = state
+        if self._arjovski_basis:
+            with tf.variable_scope("arjovski_basis", reuse=self._reuse):
+                step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
+                step2 = tf.spectral.fft(step1)
+                step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
+                step4 = permutation(step3, self._num_units, 0, self._reuse)
+                step5 = diag_mul(step4, self._num_units, 1, self._reuse)
+                step6 = tf.spectral.ifft(step5)
+                step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
+                Uh = diag_mul(step7, self._num_units, 2, self._reuse)
+        else:
+            with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+                varU = tf.get_variable("recurrent_U",
+                                       shape=[self._num_units, self._num_units, 2],
+                                       dtype=tf.float32,
+                                       initializer=arjovski_init)
+                U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+            Uh = tf.matmul(last_h, U)
 
-            # Deal with the inputs
-            # Map them into the complex plane.
-            # Hilbert transform?
-            x = tf.complex(inputs, tf.zeros_like(inputs))
-            # Vx = complex_matmul(x, self._num_units,
-            #                     scope='input_weights',
-            #                     reuse=self._reuse)
-            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-            Vx = tf.complex(Vxr, Vxi)
-            # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
-            # By FFT.
+        # Deal with the inputs
+        # Map them into the complex plane.
+        # Hilbert transform?
+        # x = tf.complex(inputs, tf.zeros_like(inputs))
+        # Vx = complex_matmul(x, self._num_units,
+        #                     scope='input_weights',
+        #                     reuse=self._reuse)
+        Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+        Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+        Vx = tf.complex(Vxr, Vxi)
+        # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
+        # By FFT.
 
-            ig = self.input_gate(Vx, bias_init=2.0)
-            fg = self.forget_gate(h=Uh, x=Vx, bias_init=2.0)
+        ig = self.input_gate(Vx, bias_init=3.5)
+        fg = self.forget_gate(h=Uh, x=Vx, bias_init=3.5)
 
-            pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
-            # pre_h = Uh + Vx
-            ht = self._activation(pre_h, reuse=self._reuse)
+        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
+        # pre_h = Uh + Vx
+        ht = self._activation(pre_h, reuse=self._reuse)
+
+        # Mapping the state back onto the real axis.
+        # By mapping.
+        output = C_to_R(ht, self._output_size, reuse=self._reuse)
+        # ht = self._activation(ht, '', reuse=True, coupled=True)
+
+        # By ifft.
+        # TODO.
+        # debug_here()
+        # print('dbg')
+        newstate = URNNStateTuple(output, ht)
+        return output, newstate
 
 
-            # Mapping the state back onto the real axis.
-            # By mapping.
-            output = C_to_R(ht, self._output_size, reuse=self._reuse)
-            # ht = self._activation(ht, '', reuse=True, coupled=True)
+class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
+    '''
+    Can we implement a complex GRU?
+    '''
 
-            # By ifft.
-            # TODO.
-            # debug_here()
-            # print('dbg')
-            newstate = URNNStateTuple(output, ht)
+    def __init__(self, num_units, activation=moebius,
+                 num_proj=None, reuse=None,
+                 orthogonal_gate=False, unitary_gate=False):
+        super().__init__(_reuse=reuse)
+        self._num_units = num_units
+        self._activation = activation
+        # self._state_to_state_act = linear
+        self._output_size = num_proj
+        self._arjovski_basis = False
+        self._state_U_mat = False
+
+    def to_string(self):
+        cell_str = 'ComplexGatedRecurrentUnit' + '_' \
+            + '_' + 'activation' + '_' + str(self._activation.__name__) + '_' \
+            + '_arjovski_basis' + '_' + str(self._arjovski_basis) \
+            + '_state_U' + '_' + str(self._state_U_mat)
+        return cell_str
+
+    @property
+    def state_size(self):
+        return URNNStateTuple(self._num_units, self._num_units)
+
+    @property
+    def output_size(self):
+        if self._output_size is None:
+            return self._num_units
+        else:
+            return self._output_size
+
+    def zero_state(self, batch_size, dtype=tf.float32):
+        out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
+        first_state = tf.complex(tf.zeros([batch_size, self._num_units]),
+                                 tf.zeros([batch_size, self._num_units]))
+        return URNNStateTuple(out, first_state)
+
+    def single_memory_gate(self, h, x, scope, bias_init=0.0,
+                           unitary=False, orthogonal=False):
+        """
+        New unified gate.
+        """
+        with tf.variable_scope(scope, self._reuse):
+            gh = complex_matmul(h, self._num_units, scope='gh', reuse=self._reuse)
+            gx = complex_matmul(x, self._num_units, scope='gx', reuse=self._reuse,
+                                bias=True, bias_init=bias_init)
+            g = gh + gx
+            ig = tf.nn.sigmoid(tf.real(g))
+            fg = tf.nn.sigmoid(tf.imag(g))
+            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
+                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
+
+    def __call__(self, inputs, state):
+        _, last_h = state
+        # Map the inputs from R to C.
+        Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+        Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+        Vx = tf.complex(Vxr, Vxi)
+        i, f = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=1.0)
+
+        with tf.variable_scope("canditate_h"):
+            var_Wx = tf.get_variable("Wx", [self._num_units, self._num_units, 2],
+                                     dtype=tf.float32,
+                                     initializer=tf.glorot_uniform_initializer())
+            var_Wh = tf.get_variable("Wh", [self._num_units, self._num_units, 2],
+                                     dtype=tf.float32,
+                                     initializer=tf.glorot_uniform_initializer())
+            var_bias = tf.get_variable("b", [self._num_units, 2], dtype=tf.float32,
+                                       initializer=tf.zeros_initializer())
+            Wx = tf.complex(var_Wx[:, :, 0], var_Wx[:, :, 1])
+            Wh = tf.complex(var_Wh[:, :, 0], var_Wh[:, :, 1])
+            bias = tf.complex(var_bias[:, 0], var_bias[:, 1])
+            tmp = tf.matmul(Vx, Wx) + tf.matmul(last_h, Wh) + bias
+            h_bar = self._activation(tmp)
+
+        # with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+        #     varU = tf.get_variable("recurrent_U",
+        #                            shape=[self._num_units, self._num_units, 2],
+        #                            dtype=tf.float32,
+        #                            initializer=arjovski_init)
+        #     U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+
+        # new_h = tf.matmul(f*last_h + i*h_bar, U)
+        new_h = f*last_h + i*h_bar
+        output = C_to_R(new_h, self._output_size, reuse=self._reuse)
+        newstate = URNNStateTuple(output, new_h)
         return output, newstate
