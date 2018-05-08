@@ -102,6 +102,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         rms = self.get_slot(var, "rms")
         mom = self.get_slot(var, "momentum")
         eps = self.get_slot(var, 'eps')
+        tf.summary.scalar('grad_norm', tf.norm(grad))
         # debug_here()
         if 'orthogonal_stiefel' in var.name and 'bias' not in var.name:
             with tf.variable_scope("orthogonal_update"):
@@ -189,7 +190,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 #     return tf.group(*[var_update_op, rms_assign_op, unitary_assertion])
         else:
             # do the usual RMSprop update
-            if 0:
+            if 1:
                 # tensorflow default.
                 print('Appling standard rmsprop to', var.name)
                 return training_ops.apply_rms_prop(

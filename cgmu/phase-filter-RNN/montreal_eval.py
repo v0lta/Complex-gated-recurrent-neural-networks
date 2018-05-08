@@ -136,7 +136,8 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             activation=activation)
         else:
-            cell = cell_fun(num_units=n_units, num_proj=output_size)
+            cell = cell_fun(num_units=n_units, num_proj=output_size,
+                            use_peepholes=True)
 
         if adding:
             x = tf.placeholder(tf.float32, shape=(batch_size, time_steps, 2))
@@ -164,9 +165,9 @@ def main(time_steps=100, n_train=int(2e6), n_test=int(1e4),
             # print(gvs)
             capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
             # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
-            train_op = optimizer.apply_gradients(capped_gvs)
+            train_op = optimizer.apply_gradients(capped_gvs, global_step=global_step)
         # debug_here()
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        # train_op = optimizer.minimize(loss, global_step=global_step)
         init_op = tf.global_variables_initializer()
         summary_op = tf.summary.merge_all()
         parameter_total = compute_parameter_total(tf.trainable_variables())
@@ -283,7 +284,7 @@ if __name__ == "__main__":
                         help='If true the data will come from the adding problem.')
     parser.add_argument('--subfolder', '-subfolder', type=str, default='exp1',
                         help='Specify a subfolder to use.')
-    parser.add_argument('--non_linearity', '-non_linearity', type=str, default='linear',
+    parser.add_argument('--non_linearity', '-non_linearity', type=str, default='mod_relu',
                         help='Specify the unitary linearity. Options are linar, mod_relu \
                               hirose, moebius, or loop to automatically run all options.')
     parser.add_argument('--qr_steps', '-qr_steps', type=int, default=int(-1),
@@ -340,7 +341,7 @@ if __name__ == "__main__":
                 if problem == 'memory':
                     adding_bool = False
                     memory_bool = True
-                for act in [linear, mod_relu, hirose, moebius]:
+                for act in [mod_relu, hirose]:
                     kwargs = {'cell_fun': dict['model'],
                               'time_steps': time_it,
                               'n_train': dict['n_train'],
