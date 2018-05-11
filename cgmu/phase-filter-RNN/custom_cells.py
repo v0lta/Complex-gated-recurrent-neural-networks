@@ -208,9 +208,26 @@ def hirose(z, scope='', reuse=None):
         m = tf.get_variable('m', [], tf.float32,
                             initializer=urnd_init(0.9, 1.1))
         modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
-        rescale = tf.complex(tf.nn.tanh(modulus/m)/modulus,
+        # use m*m to enforce positive m.
+        rescale = tf.complex(tf.nn.tanh(modulus/(m*m))/modulus,
                              tf.zeros_like(modulus))
         return tf.multiply(rescale, z)
+
+
+def gate_phase_hirose(z, scope='', reuse=None):
+    with tf.variable_scope('phase_hirose' + scope, reuse=reuse):
+        m = tf.get_variable('m', [], tf.float32,
+                            initializer=urnd_init(0.9, 1.1))
+        a = tf.get_variable('a', [], tf.float32,
+                            initializer=urnd_init(0.9, 1.1))
+        b = tf.get_variable('b', [], tf.float32,
+                            initializer=urnd_init(0, 0.1))
+        # initialize as open gate.
+        c = tf.get_variable('c', [], tf.float32,
+                            initializer=urnd_init(0, 0.1))
+        modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
+        phase = tf.atan2(tf.imag(z), tf.real(z))
+        return tf.tanh(modulus/(m*m)) * tf.nn.sigmoid(a*tf.sin(phase + b) + c)
 
 
 def moebius(z, scope='', reuse=None):
@@ -607,8 +624,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     '''
 
     def __init__(self, num_units, activation=moebius,
-                 num_proj=None, reuse=None,
-                 orthogonal_gate=False, unitary_gate=False):
+                 num_proj=None, reuse=None):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
@@ -618,15 +634,18 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._input_fourier = True
         self._input_hilbert = False
         self._input_split_matmul = False
-        self._weight_normalization = True
+        self._stateU = True
+        self._gateO = True
+        self._richards_factor = 4
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \
             + '_' + 'activation' + '_' + str(self._activation.__name__) + '_' \
             + '_inputFourier' + '_' + str(self._input_fourier) + '_'\
-            + '_inputHilbert' + '_' + str(self._input_hilbert) + '_'\
             + '_inputSplitMatmul' + '_' + str(self._input_split_matmul) + '_' \
-            + '_weight_normalization' + '_' + str(self._weight_normalization)
+            + '_richards_factor_' + str(self._richards_factor) \
+            + '_stateU' + '_' + str(self._stateU) \
+            + '_gateO_' + str(self._gateO)
         return cell_str
 
     @property
@@ -648,9 +667,9 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
 
     def single_memory_gate(self, h, x, scope, bias_init=0.0,
                            unitary=False, orthogonal=False,
-                           relu=False):
+                           richards_factor=4):
         """
-        New unified gate.
+        New unified gate, idea use real and imaginary outputs as gating scalars.
         """
         with tf.variable_scope(scope, self._reuse):
             gh = complex_matmul(h, self._num_units, scope='gh', reuse=self._reuse,
@@ -658,14 +677,28 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             gx = complex_matmul(x, self._num_units, scope='gx', reuse=self._reuse,
                                 bias=True, bias_init=bias_init)
             g = gh + gx
-            if relu:
-                ig = gate_relu(tf.real(g))
-                fg = gate_relu(tf.real(g))
-            else:
-                ig = tf.nn.sigmoid(tf.real(g))
-                fg = tf.nn.sigmoid(tf.imag(g))
-            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
-                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
+            ig = tf.nn.sigmoid(richards_factor * tf.real(g))
+            fg = tf.nn.sigmoid(richards_factor * tf.imag(g))
+            return (tf.complex(ig, tf.zeros_like(ig), name='r'),
+                    tf.complex(fg, tf.zeros_like(fg), name='z'))
+
+    def phase_filter_gates(self, h, x, scope, bias_init=4.0):
+        """
+        Complex GRU gates, the idea is that gates should make use of phase information.
+        """
+        with tf.variable_scope(scope, self._reuse):
+            ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
+            gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
+                                 bias=True, bias_init=bias_init)
+            gr = ghr + gxr
+            r = gate_phase_hirose(gr, 'gate_phase_r')
+            ghz = complex_matmul(h, self._num_units, scope='ghz', reuse=self._reuse)
+            gxz = complex_matmul(x, self._num_units, scope='gxz', reuse=self._reuse,
+                                 bias=True, bias_init=bias_init)
+            gz = ghz + gxz
+            z = gate_phase_hirose(gz, 'gate_phase_z')
+            return (tf.complex(r, tf.zeros_like(r), name='r'),
+                    tf.complex(z, tf.zeros_like(z), name='z'))
 
     def __call__(self, inputs, state):
         _, last_h = state
@@ -684,15 +717,17 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         else:
             Vx = tf.complex(inputs, tf.zeros_like(inputs))
 
-        r, z = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=4.0,
-                                       orthogonal=self._weight_normalization)
+        # r, z = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=4.0,
+        #                                orthogonal=self._gateO,
+        #                                richards_factor=self._richards_factor)
+        r, z = self.phase_filter_gates(last_h, Vx, 'memory_gate', bias_init=4.0)
 
         with tf.variable_scope("canditate_h"):
             in_shape = tf.Tensor.get_shape(Vx).as_list()[-1]
             var_Wx = tf.get_variable("Wx", [in_shape, self._num_units, 2],
                                      dtype=tf.float32,
                                      initializer=tf.glorot_uniform_initializer())
-            if self._weight_normalization:
+            if self._stateU:
                 with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
                     varU = tf.get_variable("recurrent_U",
                                            shape=[self._num_units, self._num_units, 2],

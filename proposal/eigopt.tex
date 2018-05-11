@@ -9,6 +9,7 @@
 \pgfplotsset{compat=1.13}
 \usepackage[hidelinks]{hyperref}
 \usepackage{standalone}
+\include{draft_AY}
 
 \title{Complex unitary memory units}
 \author{Moritz Wolter  \\
@@ -23,9 +24,10 @@
 % before or after the \begin{document} command 
 % BUT the \maketitle command MUST come AFTER the \begin{document} command! 
 \begin{document}
-\tableofcontents
-\newpage
+% \nipsfinalcopy is no longer used
+
 \maketitle
+
 \begin{abstract}
 RNN optimization often suffers from numberically unstable gradients. We propose a novel complex RNN architecture, which can be shown to be numerically stable. Building on top of recent sucesses in the optimization of complex valued neural networks we propose a novel memory cell, which allows us to take gated recurrent units to the complex domain. In short we optimize: 
 \begin{align}
@@ -38,7 +40,17 @@ We show that our complex gated memory cells are practically stable and use wirti
 \end{abstract}
 
 \section{Introduction}
-The training process of artificial neural networks is not necessarily stable. Unstable problem formulations lead to problems which are hard to optimize and converge slowly. Recently \cite{Arjovsky} has been able to prove that recurrent neural networks with normalized eigenvalues and bounded activiation derivatives must be stable. 
+Recurrent neural networks (RNNs) are widely used for processing time series and sequential information.  The difficulties of training RNNs, especially when trying to learn long-term dependencies, are well-established, as RNNs are prone to vanishing and exploding gradients~\cite{bengio1994learning,Hochreiter,Pascanu}.  
+% The training process of artificial neural networks is not necessarily stable. Unstable 
+% ~\MW{problem formulations lead to problems which are hard to optimize and converge slowly}.
+Heuristics have been developed to alleviate some of the optimization instabilities and learning difficulties.  They include gradient clipping~\AY{ref?}, gating, as used in gated recurrent units (GRUs) and long short-term memory (LSTM) networks, and using norm-preserving weight matrices. RNNs of the latter type are particularly interesting because they are guaranteed to be mathematically stable~\cite{Arjovsky}. To be norm-preserving, weight matrices need to be either orthogonal or unitary\footnote{Unitary matrices are the complex analogue of orthogonal matrices, \ie a complex matrix $W$ is unitary if $W W^* = W^* W = I$, where $W^*$ is its conjugate transpose and $I$ is the identity matrix.~\AY{check necessity of square in definition}.}.  
+
+Arjovsky~\etal~\cite{Arjovsky}, as well as follow-up works~\cite{Hyland, Wisdom} advocate working in the complex domain, since enforcing weight matrices to be unitary is less restrictive than enforcing orthogonality. Unitary Matrices can spread their eigenvalues over the entire unit circle, while orthogonal matrices have eigenvalues of either minus one or one.  However, complex neural networks have been receiving attention in their own right~\AY{add citations of complex networks}. ~\AY{add reasons why we want to work in the complex domain; see benefits form chapter 2 of Mandic, complex filtering book}. ~\AY{It is our interest to develop the mathematical theory for working with complex recurrent neural networks}.  
+
+We (along with many others~\AY{citations}) posit that working in the complex domain can significantly increase the functionality of neural networks while simplifying the learning task.  Complex neural networks are more than simply a real-valued counterpart with twice as many parameters / dimensions.
+
+Directly extending the mathematics of RNNs to complex networks is non-trivial because of~\AY{x and Y}. ~\AY{To date, has only been shown for CNNs, no gates, etc.} In this work, we propose a stable gated RNN~\AY{discuss contributions of paper}.
+
 
 \section{Related work}
 Normalized complex matrices where first introduced into the literature by \cite{Arjovsky}. Since then \cite{Wisdom}, expanded the reach of the unitary matrix basis. An idea that is taken further by \cite{Hyland}, which makes use Lie group theory.  
@@ -46,11 +58,81 @@ A holomorph non-linearity was used in \cite{Guberman}, \cite{Arjovsky} introduce
 Finally \cite{Jing}, proposes a gated unitary RNN, but is restricted to the real numbers. \\
 Finding a gradient for functions from $\mathbb{C}$ to $\mathbb{R}$, is a problem which has been adressed in the digital signal processing literature. Where complex problems with real cost functions had to be solved \cite{Brandwood}\cite{Bos}\cite{Franken}\cite{Delgado}. Applications to neural network cost functions where considered later \cite{Mandic}. All solutions essentially utilize Wirtinger calculus \cite{Wirtinger}, to come up with an approximate gradient for a non-holomorph function.
 
-\section{Complex unitary memory unit definition}
-Setting up complex gating mechanisms is no trivial task, because functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
-Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore hard to implement, because there is no obvious complex gradient to train these gates. 
-We define:
-\subsection{The classic variant}
+\section{Preliminaries}
+A complex-valued function $f$ mapping 
+
+\AY{add small primer on requirements for complex networks, holomorph, Wirtinger calculus / pseudo-gradients; see section II of Scardapane section II}
+
+\subsection{$\mathbb{C}\mathbb{R}$ Calculus}
+\AY{definition of z = u + iv; separation of complex into real and imaginary}\\
+\AY{to be truly differentiable / holomorph, needs to satisfy Cauchy-Riemann conditions; most people are put off by Liouville's condition.}
+\AY{however, can leverage the use of CR-Calculus, also known as Wirtinger calulus.  In such a scenario, add equations of real and imaginary derivative; approximations}
+
+
+\subsection{Complex Activation Functions}
+\begin{itemize}
+    \item non-linear and bounded
+    \item for learning, partial derivatives should exist and also be bounded
+\end{itemize}
+
+Based on Liousville's theorem, functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant
+
+
+\section{Complex Gated Network}
+\subsection{Norm-Preserving RNNs}
+Suppose we are given a neural network with $T$ hidden layers and an objective function $C$.  Let $x_t$ and $h_t$ represent the input and hidden unit vectors at layer $t$, $f$ be a point-wise non-linearity function, and $W_t$ and $V_t$ be the hidden and input weight matrices respectively.  The network can be defined as
+\begin{align}
+    % h_{t+1} &= f(\bW_t h_t + \bV_t x_{t+1})
+    z_{t+1} &= \bW_t h_t + \bV_t x_{t+1} \\
+    h_{t+1} &= f(z_{t+1}).
+\end{align}
+
+A matrix $\bW$ is norm-preserving if its repeated multiplication with a vector leaves the vector norm unchanged, \ie $\Vert \bW h\Vert_{2} = \Vert h \Vert_2$.  If $\bW$ contains only real-valued entries, and $\bW^\intercal \bW =  \bW \bW^\intercal = \bm{I}$.  If $\bW$ contains entries from the complex domain, it is \emph{unitary} and $\bW^* \bW = \bW \bW^* = \bm{I}$, where $\bW^*$ is the complex conjugate transpose of $\bW$.  
+
+In~\cite{Arjovsky}, Arjovsky~\etal~prove that with an orthogonal or unitary weight matrices $\bW_k$, one can avoid exploding gradients of the cost function $C$ with respect to $h_t$.  More specifically, the gradient magnitude can be bounded as follows
+
+\begin{align}\label{eq:gradbound}
+        \left\Vert\frac{\partial C}{\partial h_t}\right\Vert & \leq   \left\Vert\frac{\partial C}{\partial h_T}\right\Vert \prod_{k=t}^{T-1}\Vert \bD_{k+1} \bW _k^T \Vert 
+       =  \left\Vert\frac{\partial C}{\partial h_T}\right\Vert \prod_{k=t}^{T-1}\Vert \bD_{k+1} \Vert  =  \left\Vert\frac{\partial C}{\partial h_T}\right\Vert,
+\end{align}
+
+where $\bD_k = \text{diag}(f'(z_{k}))$ is the Jacobian matrix of the pointwise non-linearity.
+
+Since $\bD_k$ is a diagonal matrix, $\Vert\bD_k\Vert = \max_{j=1,...,n} |f'(z_k^{(j)})|$, where $z_k^{(j)}$ is the $j^{\text{th}}$ pre-activation of the $k^{\text{th}}$ hidden layer.  This proof hinges the critical assumption that $\Vert\bD_k\Vert = 1$ for all layers $k$.  For real pre-activations, \ie $z \in \mathbb{R}$, this constraint is easily met with the standard rectified linear unit or ReLU.  For complex pre-activations $z \in \mathbb{C}$, however, one needs a non-linearity that is applicable to complex inputs. More importantly, 
+
+\subsection{Complex Activation Functions}
+The \emph{modReLU} proposed by Arjovsky \etal in~\cite{Arjovsky}, defined as 
+\begin{equation}
+\sigma_{\text{modReLU}}(z) = \text{Relu}(\|z\| + b) \frac{z}{\|z\|}.
+\end{equation}
+
+As noted by Arjovsky, this \emph{is} the case for the standard rectified linear unit or ReLU.  However, the standard ReLU is defined only if the pre-activation is real \ie $z_k^{(j)} \in \mathbb{R}$.  for a complex pre-activation, one needs a specially defined non-linearity applicable to complex inputs.  Arjovsky define a modRelu, however, 
+.  With a complex pre-activation $z_k^{(j)} \in \mathbb{C}$, it is complex\footnote{the only case it can be real with complex $\bW$ is if $h_t$ is the complex conjugate.}, as is proposed 
+$\sigma$ must be a bounded holomorph function 
+However, this
+due to liouville theroem, cannot be both analytic and bounded; resort to using an analytic version (always differentiable), i.e. complex tanh / complex sigmoid, then we end up with singularities and lose on the boundedness; may be difficult to avoid whilst learning;
+alternative, settle for approximations without being analytic i.e. go for partial derivatives not defined everywhere; stay for bounded
+modReLU is neither analytic nor bounded but if we stay mostly in the linear range, then won't have problems (check values in arjovsky's experiment results to verify)
+
+\subsubsection{Stiefel-manifold optimization}
+The group of unitary/orthogonal matrices is not closed under addition. Using orthogonal initialization and standard addition based gradient descent leads to loss orthogonality. In order to overcome this problem Wisdom et al.\cite{Wisdom} uses the Stiefel-Manifold optimization scheme described in\cite{Tagare}. Tagare proposes to use a gradient, which points along the Stiefel-Manifold of unitary matrices, which
+itself unitary. This gradient may be computed using \cite{Tagare}:
+\begin{align}
+\mathbf{A} &= \mathbf{W}\mathbf{G}^H - \mathbf{W}^H\mathbf{G} \\
+Y^k(\lambda) &=  (\mathbf{I} + \frac{\lambda}{2}\mathbf{A}^k)^{-1}(\mathbf{I} - \frac{\lambda}{2}\mathbf{A}^k)\mathbf{W}^k
+\end{align}
+With the resulting weight update given by $\mathbf{W}^{k+1} = Y^k(\lambda)$. 
+
+\subsection{Complex Gating}
+desirable properties for complex gate
+(1) we want a $\mathbb{C} \to \mathbb{R}$ mapping for the gates because we want to preserve (not modify) the phase (cite Arjovsky, also show experimentation, showing those which change the phase and those which do not)
+(2) have a non-linearity, so as to get a bounded gate value (from 0 to 1); non-linearity is good for learning approximation --> which non-linearity is good? show different baselines
+(3) including the gates should still conserve the overall stability of the architecture (distribution over a sum is a no-no --> LSTM distributes over a sum; compare with baseline which the gates are not constrained in any way) 
+
+
+\section{Complex gated recurrent units}
+
+\subsection{The gated unitary evolution network}
 \begin{align}
 \mathbf{i}_g &= \sigma(\mathbf{W}_i[\Re(\mathbf{x}) \; \Im(\mathbf{x})]^T),  \\
 \mathbf{f}_g &= \sigma(\mathbf{W}_f[\Re(\mathbf{x}) \; \Im(\mathbf{x})]^T),  \\
@@ -58,54 +140,55 @@ We define:
 \end{align}
 For notational brevity bias terms are omitted. $\mathbf{U}_h$ denotes a unitary matrix and $\mathbf{i}_g, \mathbf{f}_g$ are computed by mappings from $\mathbb{C} \rightarrow \mathbb{R}$. Our gates are therefore non-holomorph. We leverage Wirtinger calculus \cite{Franken}\cite{Delgado}\cite{Wirtinger}, to define a pseudogradient, which we argue is sufficient to train the gates. Because $\mathbf{U}_h$ is unitary as in \cite{Arjovsky}, we do not have to distribute our derivatives over a sum, a major difference with respect to the classical formulation in \cite{Hochreiter}. Because gate output is independent of the cell state $\mathbf{h}$, the proof in \cite{Arjovsky} holds without modification since $\sigma(\cdot) \in [0, 1]$.
 
-\subsection{The peephole variant}
-In order to make the gates dependent on the cell state, we define:
-\begin{align}
-\mathbf{g} &= \mathbf{U}_g \mathbf{h} + \mathbf{W}_g\mathbf{x} + \mathbf{b}_g, \\
-\mathbf{i}_g &= \sigma(\Re(\mathbf{g})), \\
-\mathbf{f}_g &= \sigma(\Im(\mathbf{g})), \\
-\mathbf{h}_{t+1} &= \mathbf{U}_h f(\mathbf{f}_g \odot \mathbf{h}_t) + \mathbf{U}_x(\mathbf{i}_g \odot \mathbf{x}).
-\end{align}
-This reformulation introduces a dependency of the forget gate output and the cell state. Capital $\mathbf{U}$ denotes unitary matrices. \\
-\textit{TODO: explain our gradient approximation.} \\
-\textit{TODO: Should $\mathbf{W}_i$ be unitary? $\mathbf{i}_g$ depends on h, but $\frac{\partial x}{\partial h}$ is zero.}
+\subsection{The complex gated recurrent unit}
+Setting up complex gating mechanisms is no trivial task, because functions from $\mathbb{C} \rightarrow \mathbb{R}$ cannot be holomorph unless they are constant \cite[page 9]{Bornemann}\footnote{Proof: \url{https://math.stackexchange.com/questions/1004672/prove-that-a-real-valued-constant-function-is-holomorphic-and-vice-versa}}. Furthermore bounded holomorph complex functions must be constant \cite[page 38]{Bornemann}\footnote{\url{https://en.wikipedia.org/wiki/Liouville\%27s\_theorem\_(complex\_analysis)}}.
+Classic multiplication gates with $0 \leq |f(x)| \leq 1$ and $\mathbb{C} \rightarrow \mathbb{R}$ which rely on $f(x) \cdot h$ are therefore hard to implement, because there is no obvious complex gradient to train these gates. 
 
-\subsection{Proof of stability}
-Hochreiter et al. \cite{Hochreiter} define a similar cell on $\mathbb{R}$, which is stable, because it distributes its derivatives over a sum. Following \cite{Arjovsky} we prove that gated complex unitary memory units require no such mechanism:
+In order to take the classic GRU to the complex domain, while inheriting as many of the favorable properties from \cite{Arjovsky} as possible we define:
 \begin{align}
-\frac{\partial C}{\partial h_{t}} &= \frac{\partial C}{\partial h_T}\frac{\partial h_T}{\partial h_t}, 
-                                     \label{eq:peep_cost} \\
-                                  &= \frac{\partial C}{\partial h_T}\prod_{k=t}^{T-1}\frac{\partial h_{k+1}}{\partial h_k}, \\
-                                  &= \frac{\partial C}{\partial h_T}\prod_{k=t}^{T-1}\mathbf{U}_h
-                                  \mathbf{G}_{k+1} \mathbf{F}_{k+1} + \frac{\partial C}{\partial h_T}\prod_{k=t}^{T-1}\mathbf{U}_i\mathbf{I}_{k+1} .
+\mathbf{g} &= \mathbf{O}_g \mathbf{h} + \mathbf{W}_g\mathbf{x} + \mathbf{b}_g, \\
+\mathbf{z} &= \sigma(\Re(\mathbf{g})), \\
+\mathbf{r} &= \sigma(\Im(\mathbf{g})), \\
+\overline{\mathbf{h}}_{t} &= f(\mathbf{W}_x \mathbf{x}_t + \mathbf{U}_h (\mathbf{r} \odot \mathbf{h}_{t-1}) + \mathbf{b}_h) \\
+\mathbf{h} &= (1 - \mathbf{z}_t) \odot \mathbf{h}_{t-1} +  \mathbf{z}_t \odot \overline{\mathbf{h}_t} \label{eq:gru-sum}
 \end{align}
-With $U$ unitary and $\mathbf{G} = \text{diag} (f'(\text{f} \odot h_t))$. The matrices $\mathbf{F}$ and $\mathbf{I}$ represent the change introduced by the gates. The change in gradient dynamics introduced by the gates is therefore governed by $\partial f/ \partial h_k$ as well as $\partial i/ \partial h_k$. 
+With $\mathbf{U}_h$ defined as a unitary matrix. And $\mathbf{O}$ defined as split orthogonal, which means we define $\Re(\mathbf{O})^{T}\Re(\mathbf{O}) = \mathbf{I} = \Im(\mathbf{O})^{T}\Im(\mathbf{O})$, a definition we motivate in the upcoming section. $f$ denotes the non-linearity. Please note that since $\mathbf{r}$ and $\mathbf{f}$ are real vectors. Multpilication with these vectors therefore changes only the magnitude, but leaves the phase unchanged. A major difference with respect to real valued memory cells. This definition allows the model to scale data points according to their current relevance, while leaving phase information untouched. \\
+For $\mathbf{z}, \mathbf{r} = \mathbf{1}$ the equations above simplify to the formulation proposed in $\cite{Arjovsky}$. Previous work has shown that initializing memory gates to be open is beneficial \MW{TODO: Find citations}.
+
+\subsection{Model stability}
+For $\mathbf{z} \neq \mathbf{1}$ derivatives will distribute over a sum, forming a constant error carrousel as described in \cite{Hochreiter}. Choosing the gate bias to be large we initially have $\mathbf{z} \approx \mathbf{1}$ and a situation similar to \cite{Arjovsky} considering their formulation, while taking into account the added reset gate we obtain: 
+\begin{align}
+\frac{\partial C}{\partial \mathbf{h}_{t}} &= \frac{\partial C}{\partial \mathbf{h}_T}\frac{\partial 
+                                              \mathbf{h}_T}{\partial \mathbf{h}_t}, 
+                                     \label{eq:peep_cost} \\
+                                  &= \frac{\partial C}{\partial \mathbf{h}_T}\prod_{k=t}^{T-1}\frac{\partial \mathbf{h}_{k+1}}{\partial \mathbf{h}_k}, \\
+                                  &= \frac{\partial C}{\partial \mathbf{h}_T}\prod_{k=t}^{T-1}\mathbf{U}_h
+                                  \mathbf{G}_{k+1} \mathbf{R}_{k+1}
+\end{align}
+With $\mathbf{U}$ unitary and $\mathbf{G} = \text{diag} (f'(\mathbf{r} \odot \mathbf{h}_t))$. The matrix $\mathbf{R}$ and $\mathbf{Z}$ represent the change introduced by the gates. The change in gradient dynamics introduced by the reset gate is therefore governed by $\partial \mathbf{r}/ \partial \mathbf{h}_k$ as well as $\partial \mathbf{z}/ \partial \mathbf{h}_k$. 
 Wirtinger-calculus tells us that \cite{Remmert}[page 55],\cite{Mandic}[page 61, eq 5.14]:
 \begin{align}
-\frac{\partial f}{\partial h_k} &= \frac{\partial f}{\partial g_k}\frac{\partial g_k}{\partial h_k} + \frac{\partial f}{\partial \overline{g_k}}\frac{\partial \overline{g_k}}{\partial h_k}  & \text{Wirtinger chain rule}\\
-                                &= \frac{1}{2i}\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i})\mathbf{U}_g -
-                                  \frac{1}{2i}\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i})\overline{\mathbf{U}}_g \\
-                                &= \sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i})(\frac{\mathbf{U}_g - \overline{\mathbf{U}}_g}{2i}) \\
-                                &= \sigma'(\Im(g))\Im(\mathbf{U}_g) \\
-\frac{\partial i}{\partial h_k} &= \frac{\partial i}{\partial g_k}\frac{\partial g_k}{\partial h_k} + \frac{\partial i}{\partial \overline{g_k}}\frac{\partial \overline{g_k}}{\partial h_k}  & \\
-                                &= \frac{1}{2}\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2})\mathbf{U}_g + 
-                                  \frac{1}{2}\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2})\overline{\mathbf{U}}_g \\
-                                &= \sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2})(\frac{\mathbf{U}_g + \overline{\mathbf{U}}_g}{2}) \\
-                                &= \sigma'(\Re(g))\Re(\mathbf{U}_g) \\
+\frac{\partial \mathbf{r}}{\partial \mathbf{h}_k} &= \frac{\partial \mathbf{r}}{\partial \mathbf{g}_k}\frac{\partial \mathbf{g}_k}{\partial \mathbf{h}_k} + \frac{\partial \mathbf{r}}{\partial \overline{\mathbf{g}_k}}\frac{\partial \overline{\mathbf{g}_k}}{\partial \mathbf{h}_k}  & \text{Wirtinger chain rule}\\
+                                &= \frac{1}{2i}\text{diag}(\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i}))\mathbf{O}_g - \frac{1}{2i}\text{diag}(\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i}))\overline{\mathbf{O}}_g \\
+                                &= \mathbf{R}(\frac{\mathbf{O}_g - \overline{\mathbf{U}}_g}{2i})  & \mathbf{R} = \text{diag}(\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2i}))\\
+                                &= \mathbf{R}\Im(\mathbf{O}_g) \\
+\frac{\partial \mathbf{z}}{\partial \mathbf{h}_k} &= \frac{\partial \mathbf{z}}{\partial \mathbf{g}_k}\frac{\partial \mathbf{g}_k}{\partial \mathbf{h}_k} + \frac{\partial \mathbf{z}}{\partial \overline{\mathbf{g}_k}}\frac{\partial \overline{\mathbf{g}_k}}{\partial \mathbf{h}_k}  & \\
+                                &= \frac{1}{2}\text{diag}(\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2}))\mathbf{O}_g +   \frac{1}{2}\text{diag}(\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2}))\overline{\mathbf{O}}_g \\
+                                &= \mathbf{Z}(\frac{\mathbf{O}_g + \overline{\mathbf{U}}_g}{2}) & \mathbf{Z} = \text{diag}(\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2})) \\
+                                &= \mathbf{Z}\Re(\mathbf{O}_g) \\
 \end{align}
 Taking the norm we obtain:
 \begin{align}
-|\frac{\partial f}{\partial h_k}| &= | \sigma'(\Im(g))| \; |\Im(\mathbf{U}_g)| \\
-|\frac{\partial i}{\partial h_k}| &= | \sigma'(\Re(g))| \; |\Re(\mathbf{U}_g)|
+|\frac{\partial \mathbf{r}}{\partial \mathbf{h}_k}| &= | \mathbf{R}| \; |\Im(\mathbf{O}_g)| \\
+|\frac{\partial \mathbf{z}}{\partial \mathbf{h}_k}| &= | \mathbf{Z} \; |\Re(\mathbf{O}_g)|
 \end{align}
-Constraining $U_g$ to have orthogonal real and imaginary part, $|\Im(\mathbf{U}_g)| = |\Re(\mathbf{U}_g)| = 1$ and going back to the cost function term ~\ref{eq:peep_cost}, considering it's norm leads to:
+Constraining $\mathbf{O}_g$ to have orthogonal real and imaginary part, $|\Im(\mathbf{O}_g)| = |\Re(\mathbf{O}_g)| = 1$ and going back to the cost function term ~\ref{eq:peep_cost}, considering it's norm leads to:
 \begin{align}
-|\frac{\partial C}{\partial h_t}| = |\frac{\partial C}{\partial h_T}| (\:  \prod_{k=t}^{T-1} 
-                                  |\mathbf{G}_{k+1}| \cdot |\mathbf{F}_{k+1}| + \prod_{k=t}^{T-1}
-                                  |\mathbf{I}_{k+1}|).
+|\frac{\partial C}{\partial \mathbf{h}_t}| = |\frac{\partial C}{\partial \mathbf{h}_T}| \:  \prod_{k=t}^{T-1} 
+                                  |\mathbf{G}_{k+1}| \cdot |\mathbf{R}_{k+1}|.
 \end{align}
-With $\mathbf{G} = \text{diag} (f'(\text{f} \odot h_t))$, $\mathbf{F} = \text{diag}(\sigma'(\frac{\mathbf{g} - \overline{\mathbf{g}}}{2}))$ and $\mathbf{I} = \text{diag}(\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2}))$. We desire $|\frac{\partial C}{\partial h_t}| = |\frac{\partial C}{\partial h_T}|$, which holds if $|\mathbf{G}_{k+1} \mathbf{F}_{k+1}| = 1 $ and $|\mathbf{I}_{k+1}| = 1$. \\
-\textit{TODO: Something is still odd here. We will probably have to introduce a 1/2 somewhere...}
+With $\mathbf{G} = \text{diag} (f'(\mathbf{r} \odot \mathbf{h}_t))$ and $\mathbf{R} = \text{diag}(\sigma'(\frac{\mathbf{g} + \overline{\mathbf{g}}}{2}))$. We desire $|\frac{\partial C}{\partial h_t}| = |\frac{\partial C}{\partial h_T}|$, which would hold only if we could guarantee $|\mathbf{G}_{k+1} \mathbf{R}_{k+1}| = 1$. $\mathbf{R}$ is populated with values drawn from a bell-shaped curve, we therefore expect $|\mathbf{R}| \leq 1$ \MW{The experiments with the gate-relu failed, because gate gradients vanish after a while. Here I am talking about sigmoid(4x)}. To prevent gradients from vanishing for longer time sequences, equation~\ref{eq:gru-sum} introduces a constant error carousel as described in \cite{Hochreiter}. We argue that our hybrid approach inherits some of the capabilities of unitary evolution networks by bounding the update in equation in~\ref{eq:gru-sum}, while at the same time gaining the noise resistance that comes with gated memory management.\\
+
 
 \subsection{Results}
 \begin{figure}
@@ -114,10 +197,44 @@ With $\mathbf{G} = \text{diag} (f'(\text{f} \odot h_t))$, $\mathbf{F} = \text{di
 \includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem.pdf}
 %\includestandalone[width=0.45\linewidth]{./img/cgmu/memory_problem}
 \includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem.pdf}
-\caption{Performance of the complex gated memory unit (cgmu, ours), the unitary neural network (unn, \cite{Arjovsky}), and long short term memory (lstm, \cite{Hochreiter}).}
+\caption{Performance of the complex gated memory unit (cgmu, ours), the unitary neural network (unn, \cite{Arjovsky}), and long short term memory (lstm, \cite{Hochreiter}), T=100 unitary U, free O, no GRU equations.}
 \label{fig:montreal_eval}
 \end{figure}
-To test our ideas we used the benchmark originally proposed in \cite{Hochreiter} following the implementation of \cite{Arjovsky}. A visualization of our results is shown in figure~\ref{fig:montreal_eval}. All modes where run with a state size of $512$, step size of $0.001$ and a batch size of $250$. For the memory problem, the baseline is at $0.173$, which all models beat. For the adding problem it is $0.167$. Again all models crack this threshold. However the convergence behavior differs. We argue that our approach gets the boost of both worlds in terms of performance an converges well on both the adding and memory problems, it shows the superior UNN dynamics on the memory problem, while at the same time behaving more like the LSTM on the adding problem, where it significantly outperforms both other models.
+\begin{figure}
+\centering
+\includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem_250_lstm_cgru_hirose_mrelu.pdf}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem_250_lstm_cgru_hirose_mrelu.pdf}
+\caption{T=250, unitary U, free O, GRU, nlstm=128, ncgru=48}
+\label{fig:montreal_eval2}
+\centering
+\includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem_100_norm_no_norm_hirose.pdf}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem_100_norm_no_norm_mod_relu.pdf}
+\caption{T=100, orthogonal unitary comparison, mod relu for memory, hirose for adding, GRU equation. nlstm=128, ncgru=48}
+\label{fig:montreal_eval3}
+\centering
+\includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem_250_norm_no_norm_hirose.pdf}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem_250_norm_no_norm_mod_relu.pdf}
+\caption{T=250, orthogonal unitary comparison, mod relu for memory, hirose for adding, GRU equation. nlstm=128, ncgru=48}
+\label{fig:montreal_eval3}
+\centering
+\end{figure}
+\begin{figure}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/adding_problem_250_wisdom.pdf}
+\includegraphics[width=0.45\linewidth]{./img/cgmu/memory_problem_250_wisdom.pdf}
+\caption{T=250, unitary evolution RNN proposed by wisdom et al. vs. LSTM nlstm=128, nUNN=128}
+\label{fig:montreal_eval3}
+\end{figure}
+
+To test our ideas we used the benchmark originally proposed in \cite{Hochreiter} following the implementation of \cite{Arjovsky}. A visualization of our results is shown in figure~\ref{fig:montreal_eval}. All modes where run with a state size of $512$, step size of $0.001$ and a batch size of $250$. For the memory problem, the baseline is at $0.173$, which all models beat. For the adding problem it is $0.167$. Again all models crack this treshhold. However the convergence behaviour differes. We argue that our apprach gets the bost of both worlds in terms of performance an converges well on both the adding and memory problems, it shows the supereor UNN dynamics on the memory problem, while at the same time behaving more like the LSTM on the adding problem, where it significantly outperforms both other models.
+
+
+\subsection{Computational Expense}
+Experimental baseline to show why complex networks are better than their counterpart with same number of params
+
+\section{Conclusion}
+TODO.
+
+
 
 \section{Other Ideas}
 \subsection{Fourier Space rotations.}

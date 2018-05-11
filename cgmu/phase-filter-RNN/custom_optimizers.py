@@ -180,14 +180,6 @@ class RMSpropNatGrad(tf.train.Optimizer):
                 W_array = tf.stack([W_new_re, W_new_img], -1)
                 var_update_op = tf.assign(var, W_array)
                 return tf.group(*[var_update_op, rms_assign_op])
-                # else:
-                #     # unitarity assertion
-                #     eye = tf.eye(*tf.Tensor.get_shape(W).as_list(), dtype=W.dtype)
-                #     test_w = eye - tf.matmul(tf.transpose(tf.conj(W)), W)
-                #     test_w_norm = tf.real(tf.norm(test_w))
-                #     unitary_assertion = tf.Assert(tf.less(test_w_norm, 1e-4),
-                #                                   [test_w_norm])
-                #     return tf.group(*[var_update_op, rms_assign_op, unitary_assertion])
         else:
             # do the usual RMSprop update
             if 1:
