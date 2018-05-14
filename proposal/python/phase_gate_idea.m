@@ -2,14 +2,15 @@ close all
 clear all
 x = linspace(-10,10, 50);
 y = linspace(-10,10, 50);
-a = 0.0;
-b = 0.8;
+a = .25;
+b = 0.5;
 for i = 1:length(x)
     for j = 1:length(x)
-        %sigx = 1./(1 + exp(-x(i)));
-        % rsig = 1./(1 + exp(-( sqrt(y(j)*y(j)  + x(i)*x(i)))));
-        sig = 1./(1 + exp(-(a*x(i) + (1- a)*y(j))));
-        % tan = tanh(x(i).*x(i) + y(j).*y(j));
+        sigx = 1./(1 + exp(-x(i)));
+        sigy = 1./(1 + exp(-y(j)));
+        sig = sigx.*sigy;
+        %sig = 1./(1 + exp(-sqrt(x(i).^2 + y(j).^2)));
+        %% tan = tanh(x(i).*x(i) + y(j).*y(j));
         g(i,j) = (sig);
     end
 end

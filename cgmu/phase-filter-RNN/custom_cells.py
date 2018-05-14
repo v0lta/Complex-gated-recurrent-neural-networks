@@ -150,54 +150,25 @@ def mod_relu(z, scope='', reuse=None):
         return tf.multiply(rescale, z)
 
 
-def mod_sigmoid(z, reuse=None):
-    """
-    ModSigmoid implementation.
-    """
-    with tf.variable_scope('mod_sigmoid', reuse=reuse):
-        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
-                                initializer=tf.constant_initializer(0.0))
-        alpha_norm = tf.nn.sigmoid(alpha)
-        pre_act = alpha_norm * tf.real(z) + (1 - alpha_norm)*tf.imag(z)
-        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
+def relu(x, scope='', reuse=None):
+    return tf.nn.relu(x)
 
 
-def gate_relu(z, reuse=None):
-    with tf.variable_scope('gate_relu'):
-        filter_neg = tf.nn.relu(z)
-        filter_pos = -tf.nn.relu(-filter_neg+1) + 1
-    return filter_pos
+def split_relu(z, scope='', reuse=None):
+    with tf.variable_scope('split_relu' + scope):
+        x = tf.real(z)
+        y = tf.imag(z)
+        return tf.complex(tf.nn.relu(x), tf.nn.relu(y))
 
 
-def phase_relu(z, scope='', reuse=None, coupled=False):
-    """
-        Set up the Phase Relu non-linearity from our paper.
-    """
-    def richards(n, k):
-        """ Elementwise implementation of the richards-function step.
-            Has non-zero gradient. Not holomorph, but trainable.
-        """
-        with tf.variable_scope("richards"):
-            return tf.nn.sigmoid(k*n)
-
-    def step(n):
-        return tf.cast(n > 0, tf.float32)  # this is bad grad=0!
-
-    with tf.variable_scope('phase_relu' + scope, reuse=reuse):
-        a = tf.get_variable('a', [], dtype=tf.float32,
-                            initializer=urnd_init(0.49, 0.51))
-        b = tf.get_variable('b', [], dtype=tf.float32,
-                            initializer=urnd_init(0.49, 0.51))
-        k = tf.constant(10.0)
-        pi = tf.constant(np.pi)
-        if coupled:
-            a = -a
-            b = -b
-        theta = tf.atan2(tf.real(z), tf.imag(z))
-        # g = step(tf.sin(theta*0.6 + 0.5*pi))
-        g = richards(tf.sin(theta*a + b*pi), k)
-        g = tf.complex(tf.ones_like(g), tf.zeros_like(g))
-        return tf.multiply(g, z)
+def z_relu(z, scope='', reuse=None):
+    with tf.variable_scope('z_relu'):
+        theta = tf.atan2(tf.imag(z), tf.real(z))
+        factor1 = tf.cast(theta > 0, tf.float32)
+        factor2 = tf.cast(theta < np.pi/2, tf.float32)
+        combined = factor1*factor2
+        rescale = tf.complex(combined, tf.zeros_like(combined))
+        return tf.multiply(rescale, z)
 
 
 def hirose(z, scope='', reuse=None):
@@ -214,20 +185,62 @@ def hirose(z, scope='', reuse=None):
         return tf.multiply(rescale, z)
 
 
+def mod_sigmoid(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation.
+    """
+    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        pre_act = alpha_norm * tf.real(z) + (1 - alpha_norm)*tf.imag(z)
+        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
+
+
+def mod_sigmoid_beta(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation.
+    """
+    with tf.variable_scope('mod_sigmoid_beta_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        beta = tf.get_variable('beta', [], dtype=tf.float32,
+                               initializer=tf.constant_initializer(1.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        beta_norm = tf.nn.sigmoid(beta)
+        pre_act = alpha_norm * tf.real(z) + beta_norm*tf.imag(z)
+        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
+
+
+def mod_sigmoid_prod(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation.
+    """
+    with tf.variable_scope('mod_sigmoid_prod_' + scope, reuse=reuse):
+        prod = tf.nn.sigmoid(tf.real(z)) * tf.nn.sigmoid(tf.imag(z))
+        return tf.complex(prod, tf.zeros_like(prod))
+
+
+def mod_sigmoid_split(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation.
+    """
+    with tf.variable_scope('mod_sigmoid_split_' + scope, reuse=reuse):
+        prod = tf.nn.sigmoid(tf.real(z)) * tf.nn.sigmoid(tf.imag(z))
+        return tf.complex(prod, tf.zeros_like(prod))
+
+
 def gate_phase_hirose(z, scope='', reuse=None):
-    with tf.variable_scope('phase_hirose' + scope, reuse=reuse):
+    with tf.variable_scope('phase_hirose_' + scope, reuse=reuse):
         m = tf.get_variable('m', [], tf.float32,
                             initializer=urnd_init(0.9, 1.1))
         a = tf.get_variable('a', [], tf.float32,
-                            initializer=urnd_init(0.9, 1.1))
-        b = tf.get_variable('b', [], tf.float32,
-                            initializer=urnd_init(0, 0.1))
-        # initialize as open gate.
-        c = tf.get_variable('c', [], tf.float32,
-                            initializer=urnd_init(0, 0.1))
+                            initializer=urnd_init(1.9, 2.1))
+        b = tf.get_variable('b', [], tf.float32, urnd_init(3.9, 4.1))
         modulus = tf.sqrt(tf.real(z)**2 + tf.imag(z)**2)
         phase = tf.atan2(tf.imag(z), tf.real(z))
-        return tf.tanh(modulus/(m*m)) * tf.nn.sigmoid(a*tf.sin(phase + b) + c)
+        gate = tf.tanh(modulus/(m*m)) * tf.nn.sigmoid(a*phase + b)
+        return tf.complex(gate, tf.zeros_like(gate))
 
 
 def moebius(z, scope='', reuse=None):
@@ -372,8 +385,8 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias_init=0.0, orthogonal=False)
         return tf.matmul(x, A) + b
 
 
-def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init=0.0,
-                   unitary=False, orthogonal=False,
+def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
+                   bias_init_c=0.0, unitary=False, orthogonal=False,
                    unitary_init=arjovski_init):
     """
     Compute Ax + b.
@@ -406,9 +419,11 @@ def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init=0.0,
                                    initializer=tf.glorot_uniform_initializer())
             A = tf.complex(varU[:, :, 0], varU[:, :, 1])
         if bias:
-            varb = tf.get_variable('bias_g', [num_proj] + [2], dtype=tf.float32,
-                                   initializer=tf.constant_initializer(bias_init))
-            b = tf.complex(varb[:, 0], varb[:, 1])
+            varbr = tf.get_variable('bias_r', [num_proj], dtype=tf.float32,
+                                    initializer=tf.constant_initializer(bias_init_r))
+            varbc = tf.get_variable('bias_c', [num_proj], dtype=tf.float32,
+                                    initializer=tf.constant_initializer(bias_init_c))
+            b = tf.complex(varbr, varbc)
             return tf.matmul(x, A) + b
         else:
             return tf.matmul(x, A)
@@ -424,17 +439,20 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     """
     Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     """
-    def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None):
+    def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None,
+                 real=False):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
         self._output_size = num_proj
         self._arjovski_basis = False
+        self._real = False
 
     def to_string(self):
         cell_str = 'UnitaryCell' + '_' \
             + '_' + 'activation' + '_' + str(self._activation.__name__) + '_' \
-            + '_arjovski_basis' + '_' + str(self._arjovski_basis)
+            + '_arjovski_basis' + '_' + str(self._arjovski_basis) + '_' \
+            + '_real_cell_' + str(self._real)
         return cell_str
 
     @property
@@ -450,22 +468,17 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
     def zero_state(self, batch_size, dtype=tf.float32):
         out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
-        # first_state = tf.complex(tf.zeros([batch_size, self._num_units],
-        #                                   dtype=tf.float32),
-        #                          tf.zeros([batch_size, self._num_units],
-        #                                   dtype=tf.float32))
-        # bucket = np.sqrt(3.0/self._num_units)
-        # # TODO: Test this!!!
-        # first_state = tf.complex(tf.random_uniform([batch_size, self._num_units],
-        #                          minval=-bucket, maxval=bucket, dtype=dtype),
-        #                          tf.random_uniform([batch_size, self._num_units],
-        #                          minval=-bucket, maxval=bucket, dtype=dtype))
-        omegas = tf.random_uniform([batch_size, self._num_units],
-                                   minval=0, maxval=2*np.pi)
-        sx = tf.cos(omegas)
-        sy = tf.sin(omegas)
-        r = (1.0)/np.sqrt(self._num_units)
-        first_state = tf.complex(r*sx, r*sy)
+        if self._real:
+            rnd = tf.random_uniform([batch_size, self._num_units],
+                                    minval=0, maxval=2)
+            first_state = rnd/tf.norm(rnd)
+        else:
+            omegas = tf.random_uniform([batch_size, self._num_units],
+                                       minval=0, maxval=2*np.pi)
+            sx = tf.cos(omegas)
+            sy = tf.sin(omegas)
+            r = (1.0)/np.sqrt(self._num_units)
+            first_state = tf.complex(r*sx, r*sy)
         return URNNStateTuple(out, first_state)
 
     # TODO h0.
@@ -477,7 +490,14 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         """
         # with tf.variable_scope("UnitaryCell"):
         last_out, last_h = state
-        if self._arjovski_basis:
+        if self._real:
+            with tf.variable_scope("orthogonal_stiefel"):
+                matO = tf.get_variable("recurrent_O",
+                                       shape=[self._num_units, self._num_units],
+                                       dtype=tf.float32,
+                                       initializer=tf.orthogonal_initializer())
+                Uh = tf.matmul(last_h, matO)
+        elif self._arjovski_basis:
             with tf.variable_scope("arjovski_basis", reuse=self._reuse):
                 step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
                 step2 = tf.spectral.fft(step1)
@@ -495,13 +515,16 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
                                        initializer=arjovski_init)
                 U = tf.complex(varU[:, :, 0], varU[:, :, 1])
                 # U = tf.Print(U, [U])
-            Uh = tf.matmul(last_h, U)
+                Uh = tf.matmul(last_h, U)
 
         # Deal with the inputs
         # Mapping inputs into the complex plane, by folding:
-        Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-        Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-        Vx = tf.complex(Vxr, Vxi)
+        if not self._real:
+            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+            Vx = tf.complex(Vxr, Vxi)
+        else:
+            Vx = matmul_plus_bias(inputs, self._num_units, 'Vx', self._reuse)
         # By leaving the real part intact.
         # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
 
@@ -512,8 +535,10 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
         # Mapping the state back onto the real axis.
         # By mapping.
-
-        output = C_to_R(ht, self._output_size, reuse=self._reuse)
+        if not self._real:
+            output = C_to_R(ht, self._output_size, reuse=self._reuse)
+        else:
+            output = matmul_plus_bias(ht, self._output_size, 'final', self._reuse, 0.0)
 
         # By fft.
         # TODO.
@@ -529,35 +554,55 @@ class UnitaryMemoryCell(UnitaryCell):
     """
 
     def __init__(self, num_units, activation=moebius, num_proj=None, reuse=None,
-                 orthogonal_gate=False, unitary_gate=False):
+                 single_gate=True):
         super().__init__(num_units, num_proj=num_proj, reuse=reuse, )
         self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
         self._arjovski_basis = False
-
-        if orthogonal_gate and unitary_gate:
-            raise ValueError("Gates cannot be split orthogonal and unitary.")
+        self._input_fourier = True
+        self._input_hilbert = False
+        self._input_split_matmul = False
+        self._single_gate = single_gate
 
     def to_string(self):
         cell_str = 'UnitaryMemoryCell' + '_' \
-            + '_activation' + '_' + str(self._activation.__name__) \
-            + '_arjovskiBasis' + '_' + str(self._arjovski_basis)
+            + '_activation' + '_' + str(self._activation.__name__)
+        if self._arjovski_basis:
+            cell_str += '_arjovskiBasis' + '_' + str(self._arjovski_basis)
+        if self._input_fourier:
+            cell_str += '_input_fourier_'
+        elif self._input_hilbert:
+            cell_str += '_input_hilbert_'
+        elif self._input_split_matmul:
+            cell_str += '__input_split_matmul_'
+        cell_str += '_singleGate_' + str(self._single_gate) + '_'
         return cell_str
 
-    def input_gate(self, x, bias_init):
-        with tf.variable_scope('input_gate', reuse=self._reuse):
-            gix = complex_matmul(x, self._num_units, scope='gix',
-                                 reuse=self._reuse, bias=True,
-                                 bias_init=bias_init)
-            return mod_sigmoid(gix, reuse=self._reuse)
+    def single_memory_gate(self, x, scope, bias_init=0.0):
+        """
+        New unified gate, idea use real and imaginary outputs as gating scalars.
+        """
+        with tf.variable_scope(scope, self._reuse):
+            gx = complex_matmul(x, self._num_units, scope='gx', reuse=self._reuse,
+                                bias=True, bias_init_r=bias_init, bias_init_c=bias_init)
+            ig = tf.nn.sigmoid(tf.real(gx))
+            fg = tf.nn.sigmoid(tf.imag(gx))
+            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
+                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
 
-    def forget_gate(self, h, x, bias_init):
-        with tf.variable_scope('forget_gate'):
-            gfx = complex_matmul(x, self._num_units, 'gfx', reuse=self._reuse, bias=True,
-                                 bias_init=bias_init)
-            gfh = complex_matmul(h, self._num_units, 'gfh', reuse=self._reuse, bias=False,
-                                 orthogonal=True)
-        return gate_relu(gfx + gfh)
+    def double_memory_gate(self, x, scope, bias_init=4.0):
+        """
+        Complex GRU gates, the idea is that gates should make use of phase information.
+        """
+        with tf.variable_scope(scope, self._reuse):
+            gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
+                                 bias=True, bias_init_c=bias_init)
+            ig = mod_sigmoid(gxr, 'ig', self._reuse)
+            gxz = complex_matmul(x, self._num_units, scope='gxz', reuse=self._reuse,
+                                 bias=True, bias_init_c=bias_init)
+            fg = mod_sigmoid(gxz, 'fg', self._reuse)
+            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
+                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
 
     def call(self, inputs, state):
         """
@@ -585,23 +630,28 @@ class UnitaryMemoryCell(UnitaryCell):
                 U = tf.complex(varU[:, :, 0], varU[:, :, 1])
             Uh = tf.matmul(last_h, U)
 
-        # Deal with the inputs
-        # Map them into the complex plane.
-        # Hilbert transform?
-        # x = tf.complex(inputs, tf.zeros_like(inputs))
-        # Vx = complex_matmul(x, self._num_units,
-        #                     scope='input_weights',
-        #                     reuse=self._reuse)
-        Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-        Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-        Vx = tf.complex(Vxr, Vxi)
-        # Vx = tf.complex(Vxr, tf.tf.zeros_like(Vxr))
-        # By FFT.
+        # deal with the inputs.
+        if self._input_fourier:
+            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+            Vx = tf.fft(cinputs)
+        elif self._input_hilbert:
+            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+            Vx = hilbert(cinputs)
+        elif self._input_split_matmul:
+            # Map the inputs from R to C.
+            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+            Vx = tf.complex(Vxr, Vxi)
+        else:
+            Vx = tf.complex(inputs, tf.zeros_like(inputs))
 
-        ig = self.input_gate(Vx, bias_init=3.5)
-        fg = self.forget_gate(h=Uh, x=Vx, bias_init=3.5)
+        if self._single_gate:
+            ig, fg = self.single_memory_gate(Vx, 'memory_gate', bias_init=4.0)
+        else:
+            ig, fg = self.double_memory_gate(Vx, 'double_memory_gate', bias_init=4.0)
 
-        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
+        WVx = complex_matmul(Vx, self._num_units, scope='input_mul', reuse=self._reuse)
+        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, WVx)
         # pre_h = Uh + Vx
         ht = self._activation(pre_h, reuse=self._reuse)
 
@@ -612,8 +662,6 @@ class UnitaryMemoryCell(UnitaryCell):
 
         # By ifft.
         # TODO.
-        # debug_here()
-        # print('dbg')
         newstate = URNNStateTuple(output, ht)
         return output, newstate
 
@@ -624,7 +672,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     '''
 
     def __init__(self, num_units, activation=moebius,
-                 num_proj=None, reuse=None):
+                 num_proj=None, reuse=None, single_gate=True):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
@@ -635,17 +683,27 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._input_hilbert = False
         self._input_split_matmul = False
         self._stateU = True
-        self._gateO = True
-        self._richards_factor = 4
+        self._gateO = False
+        self._single_gate = single_gate
+        self._gate_activation = mod_sigmoid_beta
+        self._single_gate_avg = True
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \
-            + '_' + 'activation' + '_' + str(self._activation.__name__) + '_' \
-            + '_inputFourier' + '_' + str(self._input_fourier) + '_'\
-            + '_inputSplitMatmul' + '_' + str(self._input_split_matmul) + '_' \
-            + '_richards_factor_' + str(self._richards_factor) \
-            + '_stateU' + '_' + str(self._stateU) \
-            + '_gateO_' + str(self._gateO)
+            + '_' + 'activation' + '_' + str(self._activation.__name__) + '_'
+        if self._input_fourier:
+            cell_str += '_input_fourier_'
+        elif self._input_hilbert:
+            cell_str += '_input_hilbert_'
+        elif self._input_split_matmul:
+            cell_str += '__input_split_matmul_'
+        cell_str += '_stateU' + '_' + str(self._stateU) \
+                    + '_gateO_' + str(self._gateO) \
+                    + '_singleGate_' + str(self._single_gate)
+        if self._single_gate is False:
+            cell_str += '_gate_activation_' + self._gate_activation.__name__
+        else:
+            cell_str += '_single_gate_avg_' + str(self._single_gate_avg_)
         return cell_str
 
     @property
@@ -666,8 +724,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         return URNNStateTuple(out, first_state)
 
     def single_memory_gate(self, h, x, scope, bias_init=0.0,
-                           unitary=False, orthogonal=False,
-                           richards_factor=4):
+                           unitary=False, orthogonal=False):
         """
         New unified gate, idea use real and imaginary outputs as gating scalars.
         """
@@ -675,79 +732,88 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             gh = complex_matmul(h, self._num_units, scope='gh', reuse=self._reuse,
                                 unitary=unitary, orthogonal=orthogonal)
             gx = complex_matmul(x, self._num_units, scope='gx', reuse=self._reuse,
-                                bias=True, bias_init=bias_init)
+                                bias=True, bias_init_r=bias_init,
+                                bias_init_c=bias_init)
             g = gh + gx
-            ig = tf.nn.sigmoid(richards_factor * tf.real(g))
-            fg = tf.nn.sigmoid(richards_factor * tf.imag(g))
-            return (tf.complex(ig, tf.zeros_like(ig), name='r'),
-                    tf.complex(fg, tf.zeros_like(fg), name='z'))
+            if self._single_gate_avg:
+                r = mod_sigmoid_beta(g)
+                z = mod_sigmoid_beta(g)
+                return r, z
+            else:
+                r = tf.nn.sigmoid(tf.real(g))
+                z = tf.nn.sigmoid(tf.imag(g))
+                return (tf.complex(r, tf.zeros_like(r), name='r'),
+                        tf.complex(z, tf.zeros_like(z), name='z'))
 
-    def phase_filter_gates(self, h, x, scope, bias_init=4.0):
+    def double_memory_gate(self, h, x, scope, bias_init=4.0):
         """
         Complex GRU gates, the idea is that gates should make use of phase information.
         """
         with tf.variable_scope(scope, self._reuse):
             ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
             gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
-                                 bias=True, bias_init=bias_init)
+                                 bias=True, bias_init_c=bias_init, bias_init_r=bias_init)
             gr = ghr + gxr
-            r = gate_phase_hirose(gr, 'gate_phase_r')
+            r = self._gate_activation(gr, 'r', self._reuse)
             ghz = complex_matmul(h, self._num_units, scope='ghz', reuse=self._reuse)
             gxz = complex_matmul(x, self._num_units, scope='gxz', reuse=self._reuse,
-                                 bias=True, bias_init=bias_init)
+                                 bias=True, bias_init_c=bias_init, bias_init_r=bias_init)
             gz = ghz + gxz
-            z = gate_phase_hirose(gz, 'gate_phase_z')
-            return (tf.complex(r, tf.zeros_like(r), name='r'),
-                    tf.complex(z, tf.zeros_like(z), name='z'))
+            z = self._gate_activation(gz, 'z', self._reuse)
+            return r, z
 
     def __call__(self, inputs, state):
-        _, last_h = state
+        with tf.variable_scope("ComplexGatedRecurrentUnit", reuse=self._reuse):
+            _, last_h = state
 
-        if self._input_fourier:
-            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            Vx = tf.fft(cinputs)
-        elif self._input_hilbert:
-            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            Vx = hilbert(cinputs)
-        elif self._input_split_matmul:
-            # Map the inputs from R to C.
-            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-            Vx = tf.complex(Vxr, Vxi)
-        else:
-            Vx = tf.complex(inputs, tf.zeros_like(inputs))
+            if self._input_fourier:
+                cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+                Vx = tf.fft(cinputs)
+            elif self._input_hilbert:
+                cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+                Vx = hilbert(cinputs)
+            elif self._input_split_matmul:
+                # Map the inputs from R to C.
+                Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+                Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+                Vx = tf.complex(Vxr, Vxi)
+            else:
+                Vx = tf.complex(inputs, tf.zeros_like(inputs))
 
-        # r, z = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=4.0,
-        #                                orthogonal=self._gateO,
-        #                                richards_factor=self._richards_factor)
-        r, z = self.phase_filter_gates(last_h, Vx, 'memory_gate', bias_init=4.0)
+            if self._single_gate:
+                r, z = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=4.0,
+                                               orthogonal=self._gateO)
+            else:
+                r, z = self.double_memory_gate(last_h, Vx, 'double_memory_gate',
+                                               bias_init=4.0)
 
-        with tf.variable_scope("canditate_h"):
-            in_shape = tf.Tensor.get_shape(Vx).as_list()[-1]
-            var_Wx = tf.get_variable("Wx", [in_shape, self._num_units, 2],
-                                     dtype=tf.float32,
-                                     initializer=tf.glorot_uniform_initializer())
-            if self._stateU:
-                with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+            with tf.variable_scope("canditate_h"):
+                in_shape = tf.Tensor.get_shape(Vx).as_list()[-1]
+                var_Wx = tf.get_variable("Wx", [in_shape, self._num_units, 2],
+                                         dtype=tf.float32,
+                                         initializer=tf.glorot_uniform_initializer())
+                if self._stateU:
+                    with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
+                        varU = tf.get_variable("recurrent_U",
+                                               shape=[self._num_units,
+                                                      self._num_units, 2],
+                                               dtype=tf.float32,
+                                               initializer=arjovski_init)
+                        U = tf.complex(varU[:, :, 0], varU[:, :, 1])
+                else:
                     varU = tf.get_variable("recurrent_U",
                                            shape=[self._num_units, self._num_units, 2],
                                            dtype=tf.float32,
                                            initializer=arjovski_init)
                     U = tf.complex(varU[:, :, 0], varU[:, :, 1])
-            else:
-                varU = tf.get_variable("recurrent_U",
-                                       shape=[self._num_units, self._num_units, 2],
-                                       dtype=tf.float32,
-                                       initializer=arjovski_init)
-                U = tf.complex(varU[:, :, 0], varU[:, :, 1])
 
-            var_bias = tf.get_variable("b", [self._num_units, 2], dtype=tf.float32,
-                                       initializer=tf.zeros_initializer())
-            Wx = tf.complex(var_Wx[:, :, 0], var_Wx[:, :, 1])
-            bias = tf.complex(var_bias[:, 0], var_bias[:, 1])
-            tmp = tf.matmul(Vx, Wx) + tf.matmul(tf.multiply(r, last_h), U) + bias
-            h_bar = self._activation(tmp)
-        new_h = (1 - z)*last_h + z*h_bar
-        output = C_to_R(new_h, self._output_size, reuse=self._reuse)
-        newstate = URNNStateTuple(output, new_h)
-        return output, newstate
+                var_bias = tf.get_variable("b", [self._num_units, 2], dtype=tf.float32,
+                                           initializer=tf.zeros_initializer())
+                Wx = tf.complex(var_Wx[:, :, 0], var_Wx[:, :, 1])
+                bias = tf.complex(var_bias[:, 0], var_bias[:, 1])
+                tmp = tf.matmul(Vx, Wx) + tf.matmul(tf.multiply(r, last_h), U) + bias
+                h_bar = self._activation(tmp)
+            new_h = (1 - z)*last_h + z*h_bar
+            output = C_to_R(new_h, self._output_size, reuse=self._reuse)
+            newstate = URNNStateTuple(output, new_h)
+            return output, newstate

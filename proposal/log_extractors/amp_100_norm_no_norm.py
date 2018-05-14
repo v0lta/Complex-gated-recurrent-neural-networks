@@ -53,30 +53,30 @@ def plot_logs(ps, legend, title, window_size=25, vtag='mse', ylim=[0.00, 0.35],
 base_path = '/home/moritz/infcuda/complex_net_project/cgmu/phase-filter-RNN/logs/Loop_exp4/'
 p1 = base_path + '2018-05-08 20:45:19_adding_100_1000000_10000_128_0.001_50_LSTMCell_pt_2560'
 p2 = base_path + '2018-05-08 21:58:53_adding_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_hirose__arjovski_basis_False_state_U_True_inputFourier_False__inputHilbert_False__inputSplitMatmul_False__nat_grad_rms_False_qr_steps_None_pt_9890'
-p3 = base_path + '2018-05-09 00:22:22_adding_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_hirose__inputFourier_True__inputHilbert_False__inputSplitMatmul_False__weight_normalization_True_nat_grad_rms_False_qr_steps_None_pt_9890'
+# p3 = base_path + '2018-05-09 00:22:22_adding_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_hirose__inputFourier_True__inputHilbert_False__inputSplitMatmul_False__weight_normalization_True_nat_grad_rms_False_qr_steps_None_pt_9890'
 p4 = base_path + '2018-05-09 00:24:53_adding_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_hirose__inputFourier_True__inputHilbert_False__inputSplitMatmul_False__weight_normalization_False_nat_grad_rms_False_qr_steps_None_pt_9890'
-ps = [p1, p2, p3, p4]
+ps = [p1, p2, p4]
 psf = []
 for p in ps:
     for _, _, files in os.walk(p):
         psf.append(p + '/' + files[0])
 window_size = 25
-plot_logs(psf, ['lstm', 'CGRU Unorm', 'CGRU OUnorm', 'CGRU free'], 'adding problem T=100',
+plot_logs(psf, ['lstm', 'CGRU Unorm', 'CGRU free'], 'adding problem T=100',
           window_size=25, vtag='mse', ylim=[0.00, 0.35],
           tikz=True, filename='adding_problem_100_norm_no_norm_hirose.tex')
 plt.gcf().clear()
 
 p1 = base_path + '2018-05-08 21:15:28_memory_100_1000000_10000_128_0.001_50_LSTMCell_pt_7168'
 p2 = base_path + '2018-05-09 03:56:57_memory_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_mod_relu__arjovski_basis_False_state_U_True_inputFourier_True__inputHilbert_False__inputSplitMatmul_False__nat_grad_rms_False_qr_steps_None_pt_10474'
-p3 = base_path + '2018-05-09 23:58:47_memory_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_mod_relu__inputFourier_True__inputSplitMatmul_False__richards_factor_4_stateU_True_gateO_True_nat_grad_rms_False_qr_steps_None_pt_10474'
+# p3 = base_path + '2018-05-09 23:58:47_memory_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_mod_relu__inputFourier_True__inputSplitMatmul_False__richards_factor_4_stateU_True_gateO_True_nat_grad_rms_False_qr_steps_None_pt_10474'
 p4 = base_path + '2018-05-09 03:56:12_memory_100_1000000_10000_48_0.001_50_ComplexGatedRecurrentUnit__activation_mod_relu__inputFourier_True__inputHilbert_False__inputSplitMatmul_False__weight_normalization_False_nat_grad_rms_False_qr_steps_None_pt_10474'
 
-ps = [p1, p2, p3, p4]
+ps = [p1, p2, p4]
 psf = []
 for p in ps:
     for _, _, files in os.walk(p):
         psf.append(p + '/' + files[0])
 window_size = 25
-plot_logs(psf, ['lstm', 'CGRU Unorm', 'CGRU OUnorm', 'CGRU free'], 'memory problem T=100',
+plot_logs(psf, ['lstm', 'CGRU Unorm', 'CGRU free'], 'memory problem T=100',
           window_size=25, vtag='cross_entropy', ylim=[0, .2],
           tikz=True, filename='memory_problem_100_norm_no_norm_mod_relu.tex')
