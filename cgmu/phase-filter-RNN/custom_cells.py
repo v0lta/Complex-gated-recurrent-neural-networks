@@ -226,8 +226,7 @@ def mod_sigmoid_split(z, scope='', reuse=None):
     ModSigmoid implementation.
     """
     with tf.variable_scope('mod_sigmoid_split_' + scope, reuse=reuse):
-        prod = tf.nn.sigmoid(tf.real(z)) * tf.nn.sigmoid(tf.imag(z))
-        return tf.complex(prod, tf.zeros_like(prod))
+        return tf.complex(tf.nn.sigmoid(tf.real(z)), tf.nn.sigmoid(tf.imag(z)))
 
 
 def gate_phase_hirose(z, scope='', reuse=None):
@@ -559,7 +558,7 @@ class UnitaryMemoryCell(UnitaryCell):
         self._activation = activation  # FIXME: beat linear.
         self._output_activation = None  # TODO.
         self._arjovski_basis = False
-        self._input_fourier = True
+        self._input_fourier = False
         self._input_hilbert = False
         self._input_split_matmul = False
         self._single_gate = single_gate
@@ -633,25 +632,25 @@ class UnitaryMemoryCell(UnitaryCell):
         # deal with the inputs.
         if self._input_fourier:
             cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            Vx = tf.fft(cinputs)
+            cin = tf.fft(cinputs)
         elif self._input_hilbert:
             cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            Vx = hilbert(cinputs)
+            cin = hilbert(cinputs)
         elif self._input_split_matmul:
             # Map the inputs from R to C.
-            Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-            Vx = tf.complex(Vxr, Vxi)
+            cinr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+            cini = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+            cin = tf.complex(cinr, cini)
         else:
-            Vx = tf.complex(inputs, tf.zeros_like(inputs))
+            cin = tf.complex(inputs, tf.zeros_like(inputs))
 
         if self._single_gate:
-            ig, fg = self.single_memory_gate(Vx, 'memory_gate', bias_init=4.0)
+            ig, fg = self.single_memory_gate(cin, 'memory_gate', bias_init=4.0)
         else:
-            ig, fg = self.double_memory_gate(Vx, 'double_memory_gate', bias_init=4.0)
+            ig, fg = self.double_memory_gate(cin, 'double_memory_gate', bias_init=4.0)
 
-        WVx = complex_matmul(Vx, self._num_units, scope='input_mul', reuse=self._reuse)
-        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, WVx)
+        Vx = complex_matmul(cin, self._num_units, scope='input_mul', reuse=self._reuse)
+        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
         # pre_h = Uh + Vx
         ht = self._activation(pre_h, reuse=self._reuse)
 
@@ -679,14 +678,14 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         # self._state_to_state_act = linear
         self._output_size = num_proj
         self._arjovski_basis = False
-        self._input_fourier = True
+        self._input_fourier = False
         self._input_hilbert = False
         self._input_split_matmul = False
-        self._stateU = True
+        self._stateU = False
         self._gateO = False
         self._single_gate = single_gate
-        self._gate_activation = mod_sigmoid_beta
-        self._single_gate_avg = True
+        self._gate_activation = mod_sigmoid_prod
+        self._single_gate_avg = False
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \
@@ -703,7 +702,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         if self._single_gate is False:
             cell_str += '_gate_activation_' + self._gate_activation.__name__
         else:
-            cell_str += '_single_gate_avg_' + str(self._single_gate_avg_)
+            cell_str += '_single_gate_avg_' + str(self._single_gate_avg)
         return cell_str
 
     @property
@@ -736,8 +735,8 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                 bias_init_c=bias_init)
             g = gh + gx
             if self._single_gate_avg:
-                r = mod_sigmoid_beta(g)
-                z = mod_sigmoid_beta(g)
+                r = mod_sigmoid_beta(g, scope='r')
+                z = mod_sigmoid_beta(g, scope='z')
                 return r, z
             else:
                 r = tf.nn.sigmoid(tf.real(g))
@@ -768,27 +767,27 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
 
             if self._input_fourier:
                 cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-                Vx = tf.fft(cinputs)
+                cin = tf.fft(cinputs)
             elif self._input_hilbert:
                 cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-                Vx = hilbert(cinputs)
+                cin = hilbert(cinputs)
             elif self._input_split_matmul:
                 # Map the inputs from R to C.
-                Vxr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-                Vxi = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-                Vx = tf.complex(Vxr, Vxi)
+                cinr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
+                cini = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
+                cin = tf.complex(cinr, cini)
             else:
-                Vx = tf.complex(inputs, tf.zeros_like(inputs))
+                cin = tf.complex(inputs, tf.zeros_like(inputs))
 
             if self._single_gate:
-                r, z = self.single_memory_gate(last_h, Vx, 'memory_gate', bias_init=4.0,
+                r, z = self.single_memory_gate(last_h, cin, 'memory_gate', bias_init=4.0,
                                                orthogonal=self._gateO)
             else:
-                r, z = self.double_memory_gate(last_h, Vx, 'double_memory_gate',
+                r, z = self.double_memory_gate(last_h, cin, 'double_memory_gate',
                                                bias_init=4.0)
 
             with tf.variable_scope("canditate_h"):
-                in_shape = tf.Tensor.get_shape(Vx).as_list()[-1]
+                in_shape = tf.Tensor.get_shape(cin).as_list()[-1]
                 var_Wx = tf.get_variable("Wx", [in_shape, self._num_units, 2],
                                          dtype=tf.float32,
                                          initializer=tf.glorot_uniform_initializer())
@@ -811,7 +810,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                            initializer=tf.zeros_initializer())
                 Wx = tf.complex(var_Wx[:, :, 0], var_Wx[:, :, 1])
                 bias = tf.complex(var_bias[:, 0], var_bias[:, 1])
-                tmp = tf.matmul(Vx, Wx) + tf.matmul(tf.multiply(r, last_h), U) + bias
+                tmp = tf.matmul(cin, Wx) + tf.matmul(tf.multiply(r, last_h), U) + bias
                 h_bar = self._activation(tmp)
             new_h = (1 - z)*last_h + z*h_bar
             output = C_to_R(new_h, self._output_size, reuse=self._reuse)

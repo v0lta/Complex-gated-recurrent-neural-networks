@@ -6,10 +6,11 @@ a = .25;
 b = 0.5;
 for i = 1:length(x)
     for j = 1:length(x)
-        sigx = 1./(1 + exp(-x(i)));
-        sigy = 1./(1 + exp(-y(j)));
-        sig = sigx.*sigy;
-        %sig = 1./(1 + exp(-sqrt(x(i).^2 + y(j).^2)));
+        % sigx = 1./(1 + exp(-x(i)));
+        % sigy = 1./(1 + exp(-y(j)));
+        % sig = sigx.*sigy;
+        % sig = 1./(1 + exp(-a * x(i) + b * y(j)));
+        sig = 1./(1 + exp(-a * x(i))) +  1./(1 + exp(-b * y(j)));
         %% tan = tanh(x(i).*x(i) + y(j).*y(j));
         g(i,j) = (sig);
     end

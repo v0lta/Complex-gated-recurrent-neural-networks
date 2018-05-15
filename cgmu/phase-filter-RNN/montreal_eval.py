@@ -105,6 +105,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
     test_iterations = int(n_test/batch_size)
     print("Train iterations:", train_iterations)
     if memory:
+        # following https://github.com/amarshah/complex_RNN/blob/master/memory_problem.py
         output_size = 9
         n_sequence = 10
         train_data = generate_data_memory(time_steps, n_train, n_sequence)
@@ -148,14 +149,14 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             tf.summary.scalar('mse', loss)
 
         if memory:
-            x = tf.placeholder(tf.float32, shape=(batch_size, time_steps+20, 1))
+            x = tf.placeholder(tf.int32, shape=(batch_size, time_steps+20))
             y = tf.placeholder(tf.int32, shape=(batch_size, time_steps+20))
-            y_hat = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
+            x_hot = tf.one_hot(x, output_size, dtype=tf.float32)
+            y_hat = tf.nn.dynamic_rnn(cell, x_hot, dtype=tf.float32)
             y_hat = y_hat[0]
             loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=y_hat, labels=y))
             tf.summary.scalar('cross_entropy', loss)
-
         # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
         optimizer = RMSpropNatGrad(learning_rate=learning_rate, decay=decay,
                                    global_step=global_step, qr_steps=qr_steps)
@@ -210,7 +211,6 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         for i in range(train_iterations):
             if memory:
                 x_batch = train_data[0][(i)*batch_size:(i+1)*batch_size, :]
-                x_batch = np.expand_dims(x_batch, -1)
                 y_batch = train_data[1][(i)*batch_size:(i+1)*batch_size, :]
                 feed_dict = {x: x_batch,
                              y: y_batch}
@@ -235,7 +235,6 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         for j in range(test_iterations):
             if memory:
                 x_batch = test_data[0][(j)*batch_size:(j+1)*batch_size, :]
-                x_batch = np.expand_dims(x_batch, -1)
                 y_batch = test_data[1][(j)*batch_size:(j+1)*batch_size, :]
                 feed_dict = {x: x_batch,
                              y: y_batch}
@@ -340,7 +339,7 @@ if __name__ == "__main__":
 
     if act_loop and prob_loop and time_loop:
         # for time_it in [100, 250, 500, 1000]:
-        for time_it in [100, 250]:
+        for time_it in [250]:
             for problem in ['adding', 'memory']:
                 if problem == 'adding':
                     adding_bool = True

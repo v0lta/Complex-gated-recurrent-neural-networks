@@ -2,7 +2,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
 
 def tensoboard_average(y, window):
     '''
@@ -19,7 +20,7 @@ def tensoboard_average(y, window):
 
 
 def plot_logs(ps, legend, title, window_size=25, vtag='mse', ylim=[0.00, 0.35],
-              tikz=False, filename='tfplots.tex'):
+              tikz=False, filename='tfplots.tex', log=False):
     # cs = ['b', 'r', 'g']
     for no, p in enumerate(ps):
         adding_umc = []
@@ -33,11 +34,15 @@ def plot_logs(ps, legend, title, window_size=25, vtag='mse', ylim=[0.00, 0.35],
             # ingnore that silly data loss error....
             pass
         # x = np.array(range(len(adding_umc)))
+
         y = np.array(adding_umc)
         yhat = tensoboard_average(y, window_size)
         xhat = np.linspace(0, y.shape[0], yhat.shape[0])
         # plt.plot(yhat, cs[no])
-        plt.plot(xhat, yhat, label=legend[no])
+        if log:
+            plt.semilogy(xhat, yhat, label=legend[no])
+        else:
+            plt.plot(xhat, yhat, label=legend[no])
 
     plt.ylim(ylim[0], ylim[1])
     plt.grid()

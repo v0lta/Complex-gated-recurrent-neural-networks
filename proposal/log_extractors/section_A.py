@@ -16,7 +16,7 @@ for p in ps:
         psf.append(p + '/' + files[0])
 window_size = 25
 plot_logs(psf, ['lstm', 'realUNNrelu', 'UNNmodRelu'], 'adding problem T=250, realUNN, UNN',
-          window_size=25, vtag='mse', ylim=[0.00, 0.35],
+          window_size=25, vtag='mse', ylim=[0.00, 0.25],
           tikz=False, filename='adding_problem_250_R.vs.C.tex')
 plt.gcf().clear()
 
@@ -34,6 +34,6 @@ for p in ps:
         psf.append(p + '/' + files[0])
 window_size = 25
 plot_logs(psf, ['lstm', 'realUNN', 'UNN'], 'memory problem T=250, realUNN, UNN',
-          window_size=25, vtag='cross_entropy', ylim=[0.00, 0.35],
+          window_size=25, vtag='cross_entropy', ylim=[0.00, 0.25],
           tikz=False, filename='adding_problem_T=250_R.vs.C.tex')
 plt.gcf().clear()
