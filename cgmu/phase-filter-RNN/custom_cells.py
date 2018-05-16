@@ -163,9 +163,8 @@ def split_relu(z, scope='', reuse=None):
 
 def z_relu(z, scope='', reuse=None):
     with tf.variable_scope('z_relu'):
-        theta = tf.atan2(tf.imag(z), tf.real(z))
-        factor1 = tf.cast(theta > 0, tf.float32)
-        factor2 = tf.cast(theta < np.pi/2, tf.float32)
+        factor1 = tf.cast(tf.real(z) > 0, tf.float32)
+        factor2 = tf.cast(tf.imag(z) > 0, tf.float32)
         combined = factor1*factor2
         rescale = tf.complex(combined, tf.zeros_like(combined))
         return tf.multiply(rescale, z)
@@ -547,131 +546,13 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         return output, newstate
 
 
-class UnitaryMemoryCell(UnitaryCell):
-    """
-    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
-    """
-
-    def __init__(self, num_units, activation=moebius, num_proj=None, reuse=None,
-                 single_gate=True):
-        super().__init__(num_units, num_proj=num_proj, reuse=reuse, )
-        self._activation = activation  # FIXME: beat linear.
-        self._output_activation = None  # TODO.
-        self._arjovski_basis = False
-        self._input_fourier = False
-        self._input_hilbert = False
-        self._input_split_matmul = False
-        self._single_gate = single_gate
-
-    def to_string(self):
-        cell_str = 'UnitaryMemoryCell' + '_' \
-            + '_activation' + '_' + str(self._activation.__name__)
-        if self._arjovski_basis:
-            cell_str += '_arjovskiBasis' + '_' + str(self._arjovski_basis)
-        if self._input_fourier:
-            cell_str += '_input_fourier_'
-        elif self._input_hilbert:
-            cell_str += '_input_hilbert_'
-        elif self._input_split_matmul:
-            cell_str += '__input_split_matmul_'
-        cell_str += '_singleGate_' + str(self._single_gate) + '_'
-        return cell_str
-
-    def single_memory_gate(self, x, scope, bias_init=0.0):
-        """
-        New unified gate, idea use real and imaginary outputs as gating scalars.
-        """
-        with tf.variable_scope(scope, self._reuse):
-            gx = complex_matmul(x, self._num_units, scope='gx', reuse=self._reuse,
-                                bias=True, bias_init_r=bias_init, bias_init_c=bias_init)
-            ig = tf.nn.sigmoid(tf.real(gx))
-            fg = tf.nn.sigmoid(tf.imag(gx))
-            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
-                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
-
-    def double_memory_gate(self, x, scope, bias_init=4.0):
-        """
-        Complex GRU gates, the idea is that gates should make use of phase information.
-        """
-        with tf.variable_scope(scope, self._reuse):
-            gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
-                                 bias=True, bias_init_c=bias_init)
-            ig = mod_sigmoid(gxr, 'ig', self._reuse)
-            gxz = complex_matmul(x, self._num_units, scope='gxz', reuse=self._reuse,
-                                 bias=True, bias_init_c=bias_init)
-            fg = mod_sigmoid(gxz, 'fg', self._reuse)
-            return (tf.complex(ig, tf.zeros_like(ig), name='ig'),
-                    tf.complex(fg, tf.zeros_like(fg), name='fg'))
-
-    def call(self, inputs, state):
-        """
-            Evaluate the RNN cell. Using
-            h_(t+1) = U_t*f(h_t) + V_t x_t
-        """
-        # with tf.variable_scope("UnitaryMemoryCell"):
-        last_out, last_h = state
-        if self._arjovski_basis:
-            with tf.variable_scope("arjovski_basis", reuse=self._reuse):
-                step1 = diag_mul(last_h, self._num_units, 0, self._reuse)
-                step2 = tf.spectral.fft(step1)
-                step3 = rfl_mul(step2, self._num_units, 0, self._reuse)
-                step4 = permutation(step3, self._num_units, 0, self._reuse)
-                step5 = diag_mul(step4, self._num_units, 1, self._reuse)
-                step6 = tf.spectral.ifft(step5)
-                step7 = rfl_mul(step6, self._num_units, 1, self._reuse)
-                Uh = diag_mul(step7, self._num_units, 2, self._reuse)
-        else:
-            with tf.variable_scope("unitary_stiefel", reuse=self._reuse):
-                varU = tf.get_variable("recurrent_U",
-                                       shape=[self._num_units, self._num_units, 2],
-                                       dtype=tf.float32,
-                                       initializer=arjovski_init)
-                U = tf.complex(varU[:, :, 0], varU[:, :, 1])
-            Uh = tf.matmul(last_h, U)
-
-        # deal with the inputs.
-        if self._input_fourier:
-            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            cin = tf.fft(cinputs)
-        elif self._input_hilbert:
-            cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-            cin = hilbert(cinputs)
-        elif self._input_split_matmul:
-            # Map the inputs from R to C.
-            cinr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-            cini = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-            cin = tf.complex(cinr, cini)
-        else:
-            cin = tf.complex(inputs, tf.zeros_like(inputs))
-
-        if self._single_gate:
-            ig, fg = self.single_memory_gate(cin, 'memory_gate', bias_init=4.0)
-        else:
-            ig, fg = self.double_memory_gate(cin, 'double_memory_gate', bias_init=4.0)
-
-        Vx = complex_matmul(cin, self._num_units, scope='input_mul', reuse=self._reuse)
-        pre_h = tf.multiply(fg, Uh) + tf.multiply(ig, Vx)
-        # pre_h = Uh + Vx
-        ht = self._activation(pre_h, reuse=self._reuse)
-
-        # Mapping the state back onto the real axis.
-        # By mapping.
-        output = C_to_R(ht, self._output_size, reuse=self._reuse)
-        # ht = self._activation(ht, '', reuse=True, coupled=True)
-
-        # By ifft.
-        # TODO.
-        newstate = URNNStateTuple(output, ht)
-        return output, newstate
-
-
 class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     '''
     Can we implement a complex GRU?
     '''
 
     def __init__(self, num_units, activation=moebius,
-                 num_proj=None, reuse=None, single_gate=True):
+                 num_proj=None, reuse=None, single_gate=False):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
@@ -681,11 +562,11 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._input_fourier = False
         self._input_hilbert = False
         self._input_split_matmul = False
-        self._stateU = False
-        self._gateO = False
+        self._stateU = True
         self._single_gate = single_gate
         self._gate_activation = mod_sigmoid_prod
         self._single_gate_avg = False
+        self._real = False
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \
@@ -780,8 +661,7 @@ class ComplexGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                 cin = tf.complex(inputs, tf.zeros_like(inputs))
 
             if self._single_gate:
-                r, z = self.single_memory_gate(last_h, cin, 'memory_gate', bias_init=4.0,
-                                               orthogonal=self._gateO)
+                r, z = self.single_memory_gate(last_h, cin, 'memory_gate', bias_init=4.0)
             else:
                 r, z = self.double_memory_gate(last_h, cin, 'double_memory_gate',
                                                bias_init=4.0)

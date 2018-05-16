@@ -8,6 +8,7 @@ import numpy as np
 import tensorflow as tf
 import argparse
 import custom_cells as cc
+import GRU_wrapper as wg
 
 from custom_cells import mod_relu
 from custom_cells import hirose
@@ -16,6 +17,7 @@ from custom_cells import moebius
 from custom_cells import relu
 from custom_cells import split_relu
 from custom_cells import z_relu
+
 
 from custom_optimizers import RMSpropNatGrad
 
@@ -135,6 +137,8 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         elif cell_fun.__name__ == 'ComplexGatedRecurrentUnit':
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             activation=activation, single_gate=single_gate)
+        elif cell_fun.__name__ == 'GRUCell':
+            cell = wg.RealGRUWrapper(cell_fun(num_units=n_units), output_size)
         else:
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             use_peepholes=True)
@@ -224,10 +228,12 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             np_loss, summary_mem, np_global_step, _ =  \
                 sess.run(run_lst, feed_dict=feed_dict)
             toc = time.time()
-            print('iteration', i/100, '*10^2', np.array2string(np.array(np_loss),
-                                                               precision=4),
-                  'Baseline', np.array2string(np.array(baseline), precision=4),
-                  'update took:', np.array2string(np.array(toc - tic), precision=4), 's')
+            if i % 10 == 0:
+                print('iteration', i/100, '*10^2', np.array2string(np.array(np_loss),
+                                                                   precision=4),
+                      'Baseline', np.array2string(np.array(baseline), precision=4),
+                      'update took:', np.array2string(np.array(toc - tic), precision=4),
+                      's')
             train_plot.append([i/100, np_loss])
             summary_writer.add_summary(summary_mem, global_step=np_global_step)
 
@@ -259,7 +265,7 @@ if __name__ == "__main__":
          of the hochreiter RNN evaluation metrics.")
     parser.add_argument("--model", default='EUNN',
                         help='Model name: LSTM, UNN, GUNN, CGRU')
-    parser.add_argument('--time_steps', '-time_steps', type=int, default=100,
+    parser.add_argument('--time_steps', '-time_steps', type=int, default=250,
                         help='problem length in time')
     parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
                         help='training iteration number')
@@ -290,7 +296,7 @@ if __name__ == "__main__":
                         help='Specify how often numerical errors should be corrected and \
                               the state related matrices reorthogonalized, \
                               -1 means no qr.')
-    parser.add_argument('--single_gate', '-single_gate', type=str, default='True',
+    parser.add_argument('--single_gate', '-single_gate', type=str, default='False',
                         help='Sould the memory cell gates single or doubled.')
     parser.add_argument('--grad_clip', '-grad_clip', type=str, default='True',
                         help='Use gradient clipping.')
@@ -308,6 +314,8 @@ if __name__ == "__main__":
             dict[key] = True
         elif dict[key] == "LSTM":
             dict[key] = tf.contrib.rnn.LSTMCell
+        elif dict[key] == "GRU":
+            dict[key] = tf.contrib.rnn.GRUCell
         elif dict[key] == "UNN":
             dict[key] = cc.UnitaryCell
         elif dict[key] == "GUNN":

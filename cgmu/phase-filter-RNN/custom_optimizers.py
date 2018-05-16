@@ -18,7 +18,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
 
     def __init__(self, learning_rate, decay=0.9, momentum=0.0,
                  epsilon=1e-10, global_step=None, nat_grad_normalization=False,
-                 qr_steps=None, name='RMSpropNatGrad'):
+                 qr_steps=-1, name='RMSpropNatGrad'):
         """
             TODO: Do documentation.
             TODO: Implement unitary momentum.
