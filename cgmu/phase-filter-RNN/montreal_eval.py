@@ -99,10 +99,14 @@ def generate_data_memory(time_steps, n_data, n_sequence):
 def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
          batch_size, GPU, memory, adding,
          cell_fun, activation, subfolder, gpu_mem_frac,
-         qr_steps, single_gate, grad_clip):
+         qr_steps, stiefel, real, grad_clip):
     """
     This main function does all the experimentation.
     """
+    print('params', time_steps, n_train, n_test, n_units, learning_rate, decay,
+          batch_size, GPU, memory, adding,
+          cell_fun, activation, subfolder, gpu_mem_frac,
+          qr_steps, stiefel, real, grad_clip)
     train_iterations = int(n_train/batch_size)
     test_iterations = int(n_test/batch_size)
     print("Train iterations:", train_iterations)
@@ -130,13 +134,11 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         # #### Cell selection. ####
         if cell_fun.__name__ == 'UnitaryCell':
             cell = cell_fun(num_units=n_units, num_proj=output_size,
-                            activation=activation)
-        elif cell_fun.__name__ == 'UnitaryMemoryCell':
+                            activation=activation, real=real)
+        elif cell_fun.__name__ == 'StiefelGatedRecurrentUnit':
             cell = cell_fun(num_units=n_units, num_proj=output_size,
-                            activation=activation, single_gate=single_gate)
-        elif cell_fun.__name__ == 'ComplexGatedRecurrentUnit':
-            cell = cell_fun(num_units=n_units, num_proj=output_size,
-                            activation=activation, single_gate=single_gate)
+                            activation=activation, stiefel=stiefel,
+                            real=real)
         elif cell_fun.__name__ == 'GRUCell':
             cell = wg.RealGRUWrapper(cell_fun(num_units=n_units), output_size)
         else:
@@ -193,8 +195,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         + '_' + str(batch_size) + '_clipping_' + str(grad_clip)
     # TODO. add statement checking if the nat grad optimizer is there.
     if cell.__class__.__name__ is "UnitaryCell" or \
-       cell.__class__.__name__ is "UnitaryMemoryCell" or \
-       cell.__class__.__name__ is "ComplexGatedRecurrentUnit":
+       cell.__class__.__name__ is "StiefelGatedRecurrentUnit":
         param_str += '_' + cell.to_string()
         param_str += '_' + 'nat_grad_rms' + '_' + str(optimizer._nat_grad_normalization)
         param_str += '_' + 'qr_steps' + '_' + str(optimizer._qr_steps)
@@ -228,7 +229,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             np_loss, summary_mem, np_global_step, _ =  \
                 sess.run(run_lst, feed_dict=feed_dict)
             toc = time.time()
-            if i % 10 == 0:
+            if i % 15 == 0:
                 print('iteration', i/100, '*10^2', np.array2string(np.array(np_loss),
                                                                    precision=4),
                       'Baseline', np.array2string(np.array(baseline), precision=4),
@@ -264,7 +265,7 @@ if __name__ == "__main__":
         description="Run the montreal implementation \
          of the hochreiter RNN evaluation metrics.")
     parser.add_argument("--model", default='EUNN',
-                        help='Model name: LSTM, UNN, GUNN, CGRU')
+                        help='Model name: LSTM, GRU, uRNN, sGRU')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=250,
                         help='problem length in time')
     parser.add_argument('--n_train', '-n_train', type=int, default=int(1e6),
@@ -295,9 +296,12 @@ if __name__ == "__main__":
     parser.add_argument('--qr_steps', '-qr_steps', type=int, default=int(-1),
                         help='Specify how often numerical errors should be corrected and \
                               the state related matrices reorthogonalized, \
-                              -1 means no qr.')
-    parser.add_argument('--single_gate', '-single_gate', type=str, default='False',
-                        help='Sould the memory cell gates single or doubled.')
+                              -1 means never.')
+    parser.add_argument('--real', '-real', type=str, default=False,
+                        help='Run the real version of models, \
+                        which also support complex numbers.')
+    parser.add_argument('--stiefel', '-stiefel', type=str, default='True',
+                        help='Turn stiefel manifold optimization in the sGRU on or off.')
     parser.add_argument('--grad_clip', '-grad_clip', type=str, default='True',
                         help='Use gradient clipping.')
 
@@ -316,12 +320,10 @@ if __name__ == "__main__":
             dict[key] = tf.contrib.rnn.LSTMCell
         elif dict[key] == "GRU":
             dict[key] = tf.contrib.rnn.GRUCell
-        elif dict[key] == "UNN":
+        elif dict[key] == "uRNN":
             dict[key] = cc.UnitaryCell
-        elif dict[key] == "GUNN":
-            dict[key] = cc.UnitaryMemoryCell
-        elif dict[key] == "CGRU":
-            dict[key] = cc.ComplexGatedRecurrentUnit
+        elif dict[key] == "sGRU":
+            dict[key] = cc.StiefelGatedRecurrentUnit
         elif dict[key] == "linear":
             dict[key] = linear
         elif dict[key] == "mod_relu":
@@ -371,7 +373,8 @@ if __name__ == "__main__":
                               'subfolder': dict['subfolder'],
                               'activation': act,
                               'qr_steps': dict['qr_steps'],
-                              'single_gate': dict['single_gate'],
+                              'stiefel': dict['stiefel'],
+                              'real': dict['real'],
                               'grad_clip': dict['grad_clip']}
                     # try:
                     main(**kwargs)
@@ -381,11 +384,17 @@ if __name__ == "__main__":
                     if dict['model'] == tf.contrib.rnn.LSTMCell:
                         break
 
-    elif act_loop and prob_loop:
-        for act in [linear, mod_relu, hirose, moebius]:
+    elif prob_loop and time_loop:
+        for time_it in [100, 250, 500, 750]:
             for problem in ['adding', 'memory']:
+                if problem == 'adding':
+                    adding_bool = True
+                    memory_bool = False
+                if problem == 'memory':
+                    adding_bool = False
+                    memory_bool = True
                 kwargs = {'cell_fun': dict['model'],
-                          'time_steps': dict['time_steps'],
+                          'time_steps': time_it,
                           'n_train': dict['n_train'],
                           'n_test': dict['n_test'],
                           'n_units': dict['n_units'],
@@ -397,9 +406,10 @@ if __name__ == "__main__":
                           'memory': memory_bool,
                           'adding': adding_bool,
                           'subfolder': dict['subfolder'],
-                          'activation': act,
+                          'activation': dict['non_linearity'],
                           'qr_steps': dict['qr_steps'],
-                          'single_gate': dict['single_gate'],
+                          'stiefel': dict['stiefel'],
+                          'real': dict['real'],
                           'grad_clip': dict['grad_clip']}
                 main(**kwargs)
     else:
@@ -418,7 +428,8 @@ if __name__ == "__main__":
                   'subfolder': dict['subfolder'],
                   'activation': dict['non_linearity'],
                   'qr_steps': dict['qr_steps'],
-                  'single_gate': dict['single_gate'],
+                  'stiefel': dict['stiefel'],
+                  'real': dict['real'],
                   'grad_clip': dict['grad_clip']}
 
         # TODO: run multiple times for different sequence lengths.
