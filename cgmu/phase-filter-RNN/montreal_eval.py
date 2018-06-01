@@ -10,6 +10,7 @@ import argparse
 import custom_cells as cc
 import GRU_wrapper as wg
 
+# import state to state non-linearities
 from custom_cells import mod_relu
 from custom_cells import hirose
 from custom_cells import linear
@@ -17,6 +18,14 @@ from custom_cells import moebius
 from custom_cells import relu
 from custom_cells import split_relu
 from custom_cells import z_relu
+from custom_cells import tanh
+
+# import gate non-linearities
+from custom_cells import gate_phase_hirose
+from custom_cells import mod_sigmoid_prod
+from custom_cells import mod_sigmoid_sum
+from custom_cells import mod_sigmoid
+from custom_cells import mod_sigmoid_beta
 
 
 from custom_optimizers import RMSpropNatGrad
@@ -98,7 +107,7 @@ def generate_data_memory(time_steps, n_data, n_sequence):
 
 def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
          batch_size, GPU, memory, adding,
-         cell_fun, activation, subfolder, gpu_mem_frac,
+         cell_fun, activation, gate_activation, subfolder, gpu_mem_frac,
          qr_steps, stiefel, real, grad_clip):
     """
     This main function does all the experimentation.
@@ -137,7 +146,8 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
                             activation=activation, real=real)
         elif cell_fun.__name__ == 'StiefelGatedRecurrentUnit':
             cell = cell_fun(num_units=n_units, num_proj=output_size,
-                            activation=activation, stiefel=stiefel,
+                            activation=activation, gate_activation=gate_activation,
+                            stiefel=stiefel,
                             real=real)
         elif cell_fun.__name__ == 'GRUCell':
             cell = wg.RealGRUWrapper(cell_fun(num_units=n_units), output_size)
@@ -171,6 +181,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
                 gvs = optimizer.compute_gradients(loss)
                 # print(gvs)
                 capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+                # capped_gvs = [(tf.clip_by_norm(grad, 2.0), var) for grad, var in gvs]
                 # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
                 train_op = optimizer.apply_gradients(capped_gvs, global_step=global_step)
         else:
@@ -229,7 +240,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             np_loss, summary_mem, np_global_step, _ =  \
                 sess.run(run_lst, feed_dict=feed_dict)
             toc = time.time()
-            if i % 15 == 0:
+            if i % 25 == 0:
                 print('iteration', i/100, '*10^2', np.array2string(np.array(np_loss),
                                                                    precision=4),
                       'Baseline', np.array2string(np.array(baseline), precision=4),
@@ -293,6 +304,11 @@ if __name__ == "__main__":
     parser.add_argument('--non_linearity', '-non_linearity', type=str, default='mod_relu',
                         help='Specify the unitary linearity. Options are linar, mod_relu \
                               hirose, moebius, or loop to automatically run all options.')
+    parser.add_argument('--gate_non_linearity', '-gate_non_linearity', type=str,
+                        default='mod_sigmoid_prod',
+                        help='Specify the gate non linearity. Options are linar, mod_sigmoid_prod \
+                              mod_sigmoid_sum, gate_phase_hirose, mod_sigmoid, \
+                              mod_sigmoid_beta.')
     parser.add_argument('--qr_steps', '-qr_steps', type=int, default=int(-1),
                         help='Specify how often numerical errors should be corrected and \
                               the state related matrices reorthogonalized, \
@@ -338,6 +354,18 @@ if __name__ == "__main__":
             dict[key] = split_relu
         elif dict[key] == "z_relu":
             dict[key] = z_relu
+        elif dict[key] == "tanh":
+            dict[key] = tanh
+        elif dict[key] == "mod_sigmoid_prod":
+            dict[key] = mod_sigmoid_prod
+        elif dict[key] == "gate_phase_hirose":
+            dict[key] = gate_phase_hirose
+        elif dict[key] == "mod_sigmoid":
+            dict[key] = mod_sigmoid
+        elif dict[key] == "mod_sigmoid_beta":
+            dict[key] = mod_sigmoid_beta
+        elif dict[key] == "mod_sigmoid_sum":
+            dict[key] = mod_sigmoid_sum
         elif dict[key] == 'loop':
             if key == 'non_linearity':
                 act_loop = True
@@ -349,7 +377,7 @@ if __name__ == "__main__":
 
     if act_loop and prob_loop and time_loop:
         # for time_it in [100, 250, 500, 1000]:
-        for time_it in [250]:
+        for time_it in [250, 500]:
             for problem in ['adding', 'memory']:
                 if problem == 'adding':
                     adding_bool = True
@@ -372,6 +400,7 @@ if __name__ == "__main__":
                               'adding': adding_bool,
                               'subfolder': dict['subfolder'],
                               'activation': act,
+                              'gate_activation': dict['gate_non_linearity'],
                               'qr_steps': dict['qr_steps'],
                               'stiefel': dict['stiefel'],
                               'real': dict['real'],
@@ -383,7 +412,8 @@ if __name__ == "__main__":
                     #           'diverged' + bcolors.ENDC)
                     if dict['model'] == tf.contrib.rnn.LSTMCell:
                         break
-
+                    if dict['model'] == tf.contrib.rnn.GRUCell:
+                        break
     elif prob_loop and time_loop:
         for time_it in [100, 250, 500, 750]:
             for problem in ['adding', 'memory']:
@@ -407,6 +437,7 @@ if __name__ == "__main__":
                           'adding': adding_bool,
                           'subfolder': dict['subfolder'],
                           'activation': dict['non_linearity'],
+                          'gate_activation': dict['gate_non_linearity'],
                           'qr_steps': dict['qr_steps'],
                           'stiefel': dict['stiefel'],
                           'real': dict['real'],
@@ -427,6 +458,7 @@ if __name__ == "__main__":
                   'adding': dict['adding'],
                   'subfolder': dict['subfolder'],
                   'activation': dict['non_linearity'],
+                  'gate_activation': dict['gate_non_linearity'],
                   'qr_steps': dict['qr_steps'],
                   'stiefel': dict['stiefel'],
                   'real': dict['real'],

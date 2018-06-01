@@ -20,7 +20,7 @@ def tensoboard_average(y, window):
 
 
 def plot_logs(ps, legend, title, window_size=25, vtag='mse', ylim=[0.00, 0.35],
-              tikz=False, pdf=False, filename='tfplots.tex', log=False):
+              tikz=False, filename='tfplots.tex', log=False):
     # cs = ['b', 'r', 'g']
     for no, p in enumerate(ps):
         adding_umc = []
@@ -54,7 +54,5 @@ def plot_logs(ps, legend, title, window_size=25, vtag='mse', ylim=[0.00, 0.35],
     if tikz:
         from matplotlib2tikz import save as tikz_save
         tikz_save(filename)
-    elif pdf:
-        plt.savefig(filename, bbox_inches='tight')
     else:
         plt.show()

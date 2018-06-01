@@ -154,6 +154,10 @@ def relu(x, scope='', reuse=None):
     return tf.nn.relu(x)
 
 
+def tanh(x, scope='', reuse=None):
+    return tf.nn.tanh(x)
+
+
 def split_relu(z, scope='', reuse=None):
     with tf.variable_scope('split_relu' + scope):
         x = tf.real(z)
@@ -218,6 +222,30 @@ def mod_sigmoid_prod(z, scope='', reuse=None):
     with tf.variable_scope('mod_sigmoid_prod_' + scope, reuse=reuse):
         prod = tf.nn.sigmoid(tf.real(z)) * tf.nn.sigmoid(tf.imag(z))
         return tf.complex(prod, tf.zeros_like(prod))
+
+
+def mod_sigmoid_sum(z, scope='', reuse=None):
+    with tf.variable_scope('mod_sigmoid_sum_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        sig_alpha = tf.nn.sigmoid(alpha)
+        sig_sum = (sig_alpha*tf.nn.sigmoid(tf.real(z))
+                   + (1.0 - sig_alpha) * tf.nn.sigmoid(tf.imag(z)))
+        return tf.complex(sig_sum, tf.zeros_like(sig_sum))
+
+
+def mod_sigmoid_sum_beta(z, scope='', reuse=None):
+    """ Prbobaly not a good idea."""
+    with tf.variable_scope('mod_sigmoid_sum_beta_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        beta = tf.get_variable('beta', [], dtype=tf.float32,
+                               initializer=tf.constant_initializer(0.0))
+        sig_alpha = tf.nn.sigmoid(alpha)
+        sig_beta = tf.nn.sigmoid(beta)
+        sig_sum = (sig_alpha*tf.nn.sigmoid(tf.real(z))
+                   + sig_beta * tf.nn.sigmoid(tf.imag(z)))
+        return tf.complex(sig_sum, tf.zeros_like(sig_sum))
 
 
 def mod_sigmoid_split(z, scope='', reuse=None):
@@ -550,12 +578,24 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
 class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     '''
-    Can we implement a complex GRU?
+    Implementation of a Stiefel Gated Recurren unit.
     '''
 
     def __init__(self, num_units, activation=moebius,
+                 gate_activation=mod_sigmoid_prod,
                  num_proj=None, reuse=None, stiefel=True,
                  real=False):
+        """
+        Params:
+            num_units: The size of the hidden state.
+            activation: State to state non-linearity.
+            gate_activation: The gating non-linearity.
+            num_proj: Output dimension.
+            reuse: Reuse graph weights in existing scope.
+            stiefel: If True the cell will be used using the Stiefel
+                     optimization scheme from wisdom et al.
+            real: If true a real valued cell will be created.
+        """
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
@@ -566,7 +606,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._input_hilbert = False
         self._input_split_matmul = False
         self._stiefel = stiefel
-        self._gate_activation = mod_sigmoid_prod
+        self._gate_activation = gate_activation
         self._single_gate = False
         self._real = real
 
@@ -643,9 +683,9 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             return r, z
 
     def single_memory_gate(self, h, x, scope, bias_init):
-        '''
-        Single memory gate. Extra stability?
-        '''
+        """
+        Use the real and imaginary parts of the gate equation to do the gating.
+        """
         with tf.variable_scope(scope, self._reuse):
             if self._real:
                 raise ValueError('Real cells cannot be single gated.')
@@ -661,6 +701,14 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                    tf.zeros_like(tf.imag(gs))))
 
     def __call__(self, inputs, state):
+        """
+        Evaluate the cell equations.
+        Params:
+            inputs: The input values.
+            state: the past cell state.
+        Returns:
+            output and new cell state touple.
+        """
         with tf.variable_scope("ComplexGatedRecurrentUnit", reuse=self._reuse):
             _, last_h = state
 
