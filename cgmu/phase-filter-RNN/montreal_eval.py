@@ -305,7 +305,7 @@ if __name__ == "__main__":
                         help='Specify the unitary linearity. Options are linar, mod_relu \
                               hirose, moebius, or loop to automatically run all options.')
     parser.add_argument('--gate_non_linearity', '-gate_non_linearity', type=str,
-                        default='mod_sigmoid_prod',
+                        default='mod_sigmoid',
                         help='Specify the gate non linearity. Options are linar, mod_sigmoid_prod \
                               mod_sigmoid_sum, gate_phase_hirose, mod_sigmoid, \
                               mod_sigmoid_beta.')
@@ -385,7 +385,7 @@ if __name__ == "__main__":
                 if problem == 'memory':
                     adding_bool = False
                     memory_bool = True
-                for act in [mod_relu, hirose]:
+                for act in [mod_relu, hirose, split_relu, z_relu, moebius]:
                     kwargs = {'cell_fun': dict['model'],
                               'time_steps': time_it,
                               'n_train': dict['n_train'],
