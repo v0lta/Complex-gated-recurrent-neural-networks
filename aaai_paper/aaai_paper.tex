@@ -16,7 +16,7 @@
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
+\usepackage[hidelinks]{hyperref}       % hyperlinks
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
@@ -46,13 +46,12 @@
 % author name.
 
 \author{
-  David S.~Hippocampus\thanks{Use footnote for providing further
-    information about author (webpage, alternative
-    address)---\emph{not} for acknowledging funding agencies.} \\
-  Department of Computer Science\\
-  Cranberry-Lemon University\\
-  Pittsburgh, PA 15213 \\
-  \texttt{hippo@cs.cranberry-lemon.edu} \\
+  Moritz Wolter and Anglea Yao \\%\thanks{Use footnote for providing further
+    % information about author (webpage, alternative
+    % address)---\emph{not} for acknowledging funding agencies.} \\
+  Institute of Computer Science\\
+  Bonn University\\
+  \texttt{wolter@cs.uni-bonn.de} \\
   %% examples of more authors
   %% \And
   %% Coauthor \\
@@ -337,11 +336,11 @@ We first look at the impact that gating has on the synthetic tasks by comparing 
 \begin{figure}[t!]%
 \centering
 \subfigure[]{%
-\includegraphics[width=0.4\linewidth]{./img/memory_sGRU_GRU_UNN_LSTM.pdf}}
+\includegraphics[width=0.4\linewidth]{./img/aaai_GRU_UNN_cgRNN_memory.pdf}}
 \qquad
 \subfigure[]{%
-\includegraphics[width=0.4\linewidth]{./img/adding_sGRU_GRU_UNN_LSTM.pdf}}%
-    \caption{\small Comparison of our complex gated RNN (cgRNN, blue, $n_h\!=\!164$) with the unitary RNN~\cite{Arjovsky}(uRNN, red, $n_h\!=\!286$) and standard GRU~\cite{cho-al-emnlp14}(orange, $n_h\!=\!231$) and LSTM~\cite{Hochreiter} (green, $n_h\!=\!200$[memory], $n_h\!=\!800$[adding]) on the memory (a) and adding (b) problem for $T\!=\!250$. The hidden state size $n_h$ for each network are chosen so as to approximately match the number of parameters (approximately 165k parameters total).  Figure best viewed in colour.  On the memory problem, having norm-preserving state transition matrices is critical for stable learning, while on the adding problem, having gates is important.}
+\includegraphics[width=0.4\linewidth]{./img/aaai_GRU_UNN_cgRNN_adding.pdf}}%
+    \caption{\small Comparison of our complex gated RNN (cgRNN, blue, $n_h\!=\!80$) with the unitary RNN~\cite{Arjovsky}(uRNN, orange, $n_h\!=\!140$) and standard GRU~\cite{cho-al-emnlp14}(orange, $n_h\!=\!112$) on the memory (a) and adding (b) problem for $T\!=\!250$. The hidden state size $n_h$ for each network are chosen so as to approximately match the number of parameters (approximately 42k parameters total).  Figure best viewed in colour.  On the memory problem, having norm-preserving state transition matrices is critical for stable learning, while on the adding problem, having gates is important.}
     \label{fig:unnGRU}
     \vspace{-0.5cm}
 \end{figure}
@@ -355,12 +354,11 @@ For the adding problem, previous works~\cite{Arjovsky,Hyland,Wisdom} have sugges
 \begin{figure}[t!]
     \centering
 \subfigure[]{%
-\includegraphics[width=0.4\linewidth]{./img/memory_c.pdf}}
+\includegraphics[width=0.4\linewidth]{./img/aaai_stiefel_bounded_memory.pdf}}
 \qquad
 \subfigure[]{%
-\includegraphics[width=0.4\linewidth]{./img/adding_c.pdf}}%
-    
-    \caption{\small Comparison of non-linearities and norm preserving state transition matrices on the complex gated RNNs for the adding (a) and memory (b) problems for T=250.  We find that the unbounded modReLU (see Eq.~\ref{eq:modrelu}) performs best for both problems, but only if the state transition matrices are kept unitary.  Without unitary state-transition matrices, the bounded Hirose non-linearity (see Eq.~\ref{eq:Hirose}) performs better. We use $n_h=250$ for the memory and $n_h=91$ for the adding problem.}
+\includegraphics[width=0.4\linewidth]{./img/aaai_stiefel_bounded_adding.pdf}}%
+    \caption{\small Comparison of non-linearities and norm preserving state transition matrices on the complex gated RNNs for the memory (a) and adding (b) problems for T=250.  We find that the unbounded modReLU (see Eq.~\ref{eq:modrelu}) performs best for both problems, but only if the state transition matrices are kept unitary.  Without unitary state-transition matrices, the bounded Hirose non-linearity (see Eq.~\ref{eq:Hirose}) performs better. We use $n_h=80$ for all experiments.}
     \label{fig:complex_results}
     \vspace{-0.5cm}
 \end{figure}
@@ -369,40 +367,8 @@ We compare the bounded Hirose $\tanh$ non-linearity versus the unbounded modReLU
 
 Without unitary state transition matrices, the bounded $\tanh$ non-linearity, \ie the conventional choice is better than the unbounded modReLU.  However, with unitary state transition matrices, the modReLU pulls ahead.  Again, this result is consistent for both the memory and the adding problem.  We speculate that the modReLU, like the ReLU in the real setting, is a better choice of non-linearity.  The advantages afforded upon it by being unbounded, however, also makes it more sensitive to stability, which is why these advantages are present only when the state-transition matrices are kept unitary.  Similar effects were observed in real RNNs in~\cite{Ravanelli2017ImprovingSR}, in which batch normalization was required in order to learn a standard RNN with the ReLU non-linearity.
 
-
-%Figure~\ref{fig:complex_results} explores the interplay of activations functions and Stiefel optimization. We conclude that the complex sGRU's performance increases, if the state-transition matrix is kept unitary. On the memory problem the stiefel optimised sGRU using the modRelu activation is able to inherit some of the UNNs favourable properties. \\
-
-% \begin{figure}
-%     \centering
-%     \includegraphics[width=0.45\linewidth]{./img/adding_r.pdf}
-%     \includegraphics[width=0.45\linewidth]{./img/memory_r.pdf}
-%     \caption{Results for variations of real gated RNNs on the adding and memory problems for T=250.}
-%     \label{fig:real_results}
-% \end{figure}
-% Results for our real valued sGRU experiments are shown in~\ref{fig:real_results} here the orthogonal networks do generally better with the exception of the tanh on the memory problem. On the fully rms-prop optimised tanh-sGRU does not work very well, because it is initialised with a strong bias towards open gates and does not benefit from orthogonality.    
-% Just like in the complex case models using orthogonal state to state transition matrices tend to be more stable.
-% We ensured comparable numbers of parameters by setting the real hidden state dimensions equal to $\sqrt{2c^2}$, which leads to a comparable amount of parameters as shown in table~\ref{tab:weights}. Given that the number of weights are comparable we conclude that working in the complex domain leads to better performance on the memory problem. Presumably this is because complex unitary matrices spread their eigenvalues over the entire unit circle, while orthogonal matrices can only have eigenvalues of $\pm 1$. Additionally working in the complex domain brings us an enlargement of the state size with respect to the number of weights required. A complex cell has the the same state dimension as its real counterpart at $n_{hc}/2 = n_{hr}$. The two share the same number of parameters much later at approximately $p_c \approx \sqrt{p_r^2/2}$. Which boots the complex cell's capacity to store information. 
-% \begin{table}
-% \centering
-% \begin{tabular}{|c|c|c|} \hline
-%           & complex                      & Real \\ \hline
-% Memory     & $n_h=250  \Rightarrow 394501$ Parameters & $n_h=353 \Rightarrow 387603 $ Parameters \\ \hline
-% Adding     & $n_h=91  \Rightarrow 51507$ Parameters & $n_h=128 \Rightarrow 50433 $ Parameters \\ \hline
-% \end{tabular}
-% \caption{Experiment state sizes and total number of weights.}
-% \label{tab:weights}
-% \end{table}
-
-
-%To see the impact of norm-preserving state transition matrices on the synthetic tasks, 
-
-
-% \subsection{sGRU vs. GRU}
-
-
-
-% We adopted the Stiefel-manifold-optimisation scheme proposed in~\cite{Wisdom}, to optimise our unitary state to state transition matrix. In this section we asses the effect the unitary state transition matrix has on network performance. The plot on the left of figure~\ref{fig:memoryLSTMUNNCGRU} shows a coupled CGRU with and without Stiefel-Manifold optimisation. We observe that keeping the state transition matrix unitary leads to improved overall performance in the presence of gates. 
-% As observed by previous authors unitary state transition matrices are highly beneficial on the memory problem, see figure~\ref{fig:memoryLSTMUNNCGRU} on the right.
+\subsubsection{Choosing a gate activation}
+TODO...
 
 
 \subsubsection{Human Motion Prediction}
