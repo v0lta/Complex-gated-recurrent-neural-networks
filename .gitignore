@@ -1,6 +1,6 @@
 ## log directories.
-cgmu/phase-filter-RNN/logs
-cgmu/phase-filter-RNN/cmplx_logs
+cgRNN/logs
+cgmu/human-motion-prediction/experiments
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
