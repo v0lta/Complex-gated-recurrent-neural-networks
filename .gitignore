@@ -1,6 +1,6 @@
 ## log directories.
-cgRNN/logs
-cgmu/human-motion-prediction/experiments
+logs
+human-motion-prediction/experiments
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
