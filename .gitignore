@@ -1,7 +1,5 @@
 ## log directories.
 logs/
-human-motion-prediction/experiments/
-human-motion-prediction/data/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
