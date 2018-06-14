@@ -92,7 +92,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
 
     def re_unitarize(self, W):
         # TODO: check this.
-        #_, U, V = tf.svd(W, full_matrices=True, compute_uv=True)
+        # _, U, V = tf.svd(W, full_matrices=True, compute_uv=True)
         # W = tf.matmul(U, tf.transpose(tf.conj(V)))
         W, _ = tf.qr(W)
         W = tf.Print(W, [tf.constant(0)], 'step with qr.')
