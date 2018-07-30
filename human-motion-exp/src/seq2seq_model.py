@@ -28,7 +28,7 @@ class Seq2SeqModel(object):
                architecture,
                source_seq_len,
                target_seq_len,
-               rnn_size, # hidden recurrent layer size
+               rnn_size,  # hidden recurrent layer size
                num_layers,
                max_gradient_norm,
                batch_size,
@@ -39,7 +39,9 @@ class Seq2SeqModel(object):
                number_of_actions,
                one_hot=True,
                residual_velocities=False,
-               dtype=tf.float32):
+               dtype=tf.float32,
+               custom_opt=True,
+               cgru=True):
     """Create the model.
 
     Args:
@@ -63,8 +65,6 @@ class Seq2SeqModel(object):
       residual_velocities: whether to use a residual connection that models velocities.
       dtype: the data type to use to store internal variables.
     """
-    custom_opt = True
-    cgru = True
     if custom_opt:
       summaries_dir += '/' + 'custom_opt'
     if cgru:
@@ -88,9 +88,7 @@ class Seq2SeqModel(object):
     self.learning_rate_decay_op = self.learning_rate.assign( self.learning_rate * learning_rate_decay_factor )
     self.global_step = tf.Variable(0, trainable=False)
 
-
     ### 
-
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     if cgru:
@@ -155,7 +153,7 @@ class Seq2SeqModel(object):
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
     else:
-      raise(ValueError, "Uknown architecture: %s" % architecture )
+      raise(ValueError, "Unknown architecture: %s" % architecture )
 
     self.outputs = outputs
 

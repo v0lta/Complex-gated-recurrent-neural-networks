@@ -92,7 +92,6 @@ class LinearSpaceDecoderWrapper(RNNCell):
       # LSTMStateTuple if LSTM
       if isinstance( insize, LSTMStateTuple ):
         insize = insize.h
-
     else:
       # Fine if not multi-rnn
       insize = self._cell.state_size
@@ -106,7 +105,6 @@ class LinearSpaceDecoderWrapper(RNNCell):
         initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04))
 
     self.linear_output_size = output_size
-
 
   @property
   def state_size(self):
@@ -127,6 +125,20 @@ class LinearSpaceDecoderWrapper(RNNCell):
 
     return output, new_state
 
+
+def mod_sigmoid_beta(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, with uncoupled alpha and beta.
+    """
+    with tf.variable_scope('mod_sigmoid_beta_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        beta = tf.get_variable('beta', [], dtype=tf.float32,
+                               initializer=tf.constant_initializer(1.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        beta_norm = tf.nn.sigmoid(beta)
+        pre_act = alpha_norm * tf.real(z) + beta_norm*tf.imag(z)
+        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
 
 
 def mod_sigmoid_prod(z, scope='', reuse=None):
@@ -318,7 +330,7 @@ class ComplexGatedRecurrentUnit(RNNCell):
         self._stateU = True
         self._gateO = False
         self._single_gate = single_gate
-        self._gate_activation = mod_sigmoid_prod
+        self._gate_activation = mod_sigmoid_beta
         self._single_gate_avg = False
 
     def to_string(self):

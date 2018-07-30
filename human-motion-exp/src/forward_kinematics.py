@@ -11,7 +11,7 @@ import time
 import copy
 import data_utils
 
-def fkl( angles, parent, offset, rotInd, expmapInd ):
+def fkl(angles, parent, offset, rotInd, expmapInd):
   """
   Convert joint angles and bone lenghts into the 3d points of a person.
   Based on expmap2xyz.m, available at
@@ -59,8 +59,8 @@ def fkl( angles, parent, offset, rotInd, expmapInd ):
   xyz = xyz[:,[0,2,1]]
   # xyz = xyz[:,[2,0,1]]
 
-
   return np.reshape( xyz, [-1] )
+
 
 def revert_coordinate_space(channels, R0, T0):
   """
@@ -85,15 +85,14 @@ def revert_coordinate_space(channels, R0, T0):
 
   # Loop through the passed posses
   for ii in range(n):
-    R_diff = data_utils.expmap2rotmat( channels[ii, rootRotInd] )
-    R = R_diff.dot( R_prev )
+    R_diff = data_utils.expmap2rotmat(channels[ii, rootRotInd])
+    R = R_diff.dot(R_prev)
 
     channels_rec[ii, rootRotInd] = data_utils.rotmat2expmap(R)
     T = T_prev + ((R_prev.T).dot( np.reshape(channels[ii,:3],[3,1]))).reshape(-1)
     channels_rec[ii,:3] = T
     T_prev = T
     R_prev = R
-
   return channels_rec
 
 
@@ -153,8 +152,8 @@ def _some_variables():
 
   return parent, offset, rotInd, expmapInd
 
-def main():
 
+def main():
   # Load all the data
   parent, offset, rotInd, expmapInd = _some_variables()
 
@@ -172,10 +171,12 @@ def main():
 
   # Compute 3d points for each frame
   xyz_gt, xyz_pred = np.zeros((nframes_gt, 96)), np.zeros((nframes_pred, 96))
-  for i in range( nframes_gt ):
-    xyz_gt[i,:] = fkl( expmap_gt[i,:], parent, offset, rotInd, expmapInd )
-  for i in range( nframes_pred ):
-    xyz_pred[i,:] = fkl( expmap_pred[i,:], parent, offset, rotInd, expmapInd )
+  for i in range(nframes_gt):
+    xyz_gt[i,:] = fkl(expmap_gt[i,:], parent, 
+                      offset, rotInd, expmapInd)
+  for i in range(nframes_pred):
+    xyz_pred[i,:] = fkl(expmap_pred[i,:], parent, 
+                        offset, rotInd, expmapInd)
 
   # === Plot and animate ===
   fig = plt.figure()

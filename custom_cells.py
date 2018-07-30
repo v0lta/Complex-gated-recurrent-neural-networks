@@ -234,6 +234,20 @@ def mod_sigmoid_beta(z, scope='', reuse=None):
         return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
 
 
+def mod_sigmoid_gamma(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, with uncoupled and unbounded
+    alpha and beta.
+    """
+    with tf.variable_scope('mod_sigmoid_beta_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        beta = tf.get_variable('beta', [], dtype=tf.float32,
+                               initializer=tf.constant_initializer(1.0))
+        pre_act = alpha * tf.real(z) + beta*tf.imag(z)
+        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
+
+
 def mod_sigmoid_prod(z, scope='', reuse=None):
     """
     Product version of the mod sigmoid.
@@ -278,8 +292,8 @@ def mod_sigmoid_split(z, scope='', reuse=None):
 
 def gate_phase_hirose(z, scope='', reuse=None):
     '''
-    Hirsoe inspired gate activation filtering according to 
-    phase angle. 
+    Hirsoe inspired gate activation filtering according to
+    phase angle.
     '''
     with tf.variable_scope('phase_hirose_' + scope, reuse=reuse):
         m = tf.get_variable('m', [], tf.float32,
@@ -605,7 +619,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, activation=moebius,
                  gate_activation=mod_sigmoid_prod,
                  num_proj=None, reuse=None, stiefel=True,
-                 real=False):
+                 real=False, real_double=False):
         """
         Params:
             num_units: The size of the hidden state.
@@ -616,6 +630,8 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             stiefel: If True the cell will be used using the Stiefel
                      optimization scheme from wisdom et al.
             real: If true a real valued cell will be created.
+            real_double: Use a doulbe real gate similar to to
+                         the complex version.
         """
         super().__init__(_reuse=reuse)
         self._num_units = num_units
@@ -674,6 +690,8 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         """
         Complex GRU gates, the idea is that gates should make use of phase information.
         """
+
+
         with tf.variable_scope(scope, self._reuse):
             if self._real:
                 ghr = matmul_plus_bias(h, self._num_units, scope='ghr', reuse=self._reuse,
@@ -748,12 +766,18 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                 else:
                     inputs = tf.complex(inputs, tf.zeros_like(inputs))
 
+            # use open gates initially when working with stiefel optimization.
+            if self._stiefel:
+                bias_init = 4.0
+            else:
+                bias_init = 0.0
+
             if self._single_gate:
                 r, z = self.single_memory_gate(last_h, inputs, 'single_memory_gate',
-                                               bias_init=4.0)
+                                               bias_init=bias_init)
             else:
                 r, z = self.double_memory_gate(last_h, inputs, 'double_memory_gate',
-                                               bias_init=4.0)
+                                               bias_init=bias_init)
 
             with tf.variable_scope("canditate_h"):
                 if self._real:

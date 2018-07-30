@@ -9,6 +9,10 @@ import numpy as np
 from six.moves import xrange # pylint: disable=redefined-builtin
 import copy
 
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
+
+
 def rotmat2euler( R ):
   """
   Converts a rotation matrix to Euler angles
@@ -90,10 +94,8 @@ def rotmat2quat(R):
   r[2] = -rotdiff[0,1]
   sintheta = np.linalg.norm(r) / 2;
   r0 = np.divide(r, np.linalg.norm(r) + np.finfo(np.float32).eps );
-
   costheta = (np.trace(R)-1) / 2;
-
-  theta = np.arctan2( sintheta, costheta );
+  theta = np.arctan2(sintheta, costheta);
 
   q      = np.zeros(4)
   q[0]   = np.cos(theta/2)
@@ -188,7 +190,6 @@ def revert_output_format(poses, data_mean, data_std, dim_to_ignore, actions, one
   for i in xrange(poses_out.shape[0]):
     poses_out_list.append(
       unNormalizeData(poses_out[i, :, :], data_mean, data_std, dim_to_ignore, actions, one_hot))
-
   return poses_out_list
 
 
@@ -234,14 +235,10 @@ def load_data(path_to_dataset, subjects, actions, one_hot):
   completeData = []
   for subj in subjects:
     for action_idx in np.arange(len(actions)):
-
       action = actions[ action_idx ]
-
       for subact in [1, 2]:  # subactions
-
         print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
-
-        filename = '{0}/S{1}/{2}_{3}.txt'.format( path_to_dataset, subj, action, subact)
+        filename = '{0}/S{1}/{2}_{3}.txt'.format(path_to_dataset, subj, action, subact)
         action_sequence = readCSVasFloat(filename)
 
         n, d = action_sequence.shape
@@ -256,12 +253,10 @@ def load_data(path_to_dataset, subjects, actions, one_hot):
         else:
           trainData[(subj, action, subact, 'even')] = action_sequence[even_list, :]
 
-
         if len(completeData) == 0:
           completeData = copy.deepcopy(action_sequence)
         else:
           completeData = np.append(completeData, action_sequence, axis=0)
-
   return trainData, completeData
 
 
@@ -295,7 +290,6 @@ def normalize_data( data, data_mean, data_std, dim_to_use, actions, one_hot ):
       data_out[ key ] = np.divide( (data[key][:, 0:99] - data_mean), data_std )
       data_out[ key ] = data_out[ key ][ :, dim_to_use ]
       data_out[ key ] = np.hstack( (data_out[key], data[key][:,-nactions:]) )
-
   return data_out
 
 

@@ -13,11 +13,13 @@ import time
 import h5py
 
 import numpy as np
-from six.moves import xrange # pylint: disable=redefined-builtin
 import tensorflow as tf
 
 import data_utils
 import seq2seq_model
+
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
 
 # Learning
 tf.app.flags.DEFINE_float("learning_rate", .005, "Learning rate.")
@@ -47,6 +49,8 @@ tf.app.flags.DEFINE_integer("save_every", 1000, "How often to compute error on t
 tf.app.flags.DEFINE_boolean("sample", False, "Set to True for sampling.")
 tf.app.flags.DEFINE_boolean("use_cpu", False, "Whether to use the CPU")
 tf.app.flags.DEFINE_integer("load", 0, "Try to load a previous checkpoint.")
+tf.app.flags.DEFINE_boolean("cgru", True, "Specify if the complex GRU should be used.")
+tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -59,9 +63,27 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'depth_{0}'.format(FLAGS.num_layers),
   'size_{0}'.format(FLAGS.size),
   'lr_{0}'.format(FLAGS.learning_rate),
-  'residual_vel' if FLAGS.residual_velocities else 'not_residual_vel'))
+  'residual_vel' if FLAGS.residual_velocities else 'not_residual_vel',
+  'custom_opt' if FLAGS.cgru else 'RMSProp',
+  'cgru' if FLAGS.cgru else 'gru'))
 
 summaries_dir = os.path.normpath(os.path.join( train_dir, "log_complex" )) # Directory for TB summaries
+
+def compute_parameter_total(trainable_variables):
+    total_parameters = 0
+    for variable in trainable_variables:
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        print('var_name', variable.name, 'shape', shape, 'dim', len(shape))
+        variable_parameters = 1
+        for dim in shape:
+            # print(dim)
+            variable_parameters *= dim.value
+        print('parameters', variable_parameters)
+        total_parameters += variable_parameters
+    print('total:', total_parameters)
+    return total_parameters
+
 
 def create_model(session, actions, sampling=False):
   """Create translation model and initialize or load parameters in session."""
@@ -81,6 +103,8 @@ def create_model(session, actions, sampling=False):
       len( actions ),
       not FLAGS.omit_one_hot,
       FLAGS.residual_velocities,
+      custom_opt=FLAGS.cgru,
+      cgru=FLAGS.cgru,
       dtype=tf.float32)
 
   if FLAGS.load <= 0:
@@ -122,11 +146,10 @@ def train():
     actions, FLAGS.seq_length_in, FLAGS.seq_length_out, FLAGS.data_dir, not FLAGS.omit_one_hot )
 
   # Limit TF to take a fraction of the GPU memory
-  gpu_options = tf.GPUOptions(visible_device_list=str(6),
-                              per_process_gpu_memory_fraction=1)
-  device_count = {"GPU": 0} if FLAGS.use_cpu else {"GPU": 1}
+  gpu_options = tf.GPUOptions(visible_device_list=str(FLAGS.GPU),
+                              per_process_gpu_memory_fraction=0.9)
 
-  with tf.Session(config=tf.ConfigProto( gpu_options=gpu_options, device_count = device_count )) as sess:
+  with tf.Session(config=tf.ConfigProto( gpu_options=gpu_options)) as sess:
 
     # === Create the model ===
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -147,7 +170,10 @@ def train():
 
     step_time, loss = 0, 0
 
-    for _ in xrange( FLAGS.iterations ):
+    parameter_total = compute_parameter_total(tf.trainable_variables())
+    print("parameter total", parameter_total)
+
+    for _ in range( FLAGS.iterations ):
 
       start_time = time.time()
 
@@ -220,7 +246,7 @@ def train():
             # are set to zero.
             # See https://github.com/asheshjain399/RNNexp/issues/6#issuecomment-249404882
             gt_i=np.copy(srnn_gts_euler[action][i])
-            gt_i[:,0:6] = 0
+            gt_i[:, 0:6] = 0
 
             # Now compute the l2 error. The following is numpy port of the error
             # function provided by Ashesh Jain (in matlab), available at
@@ -462,6 +488,7 @@ def train():
 
         print()
         print("============================\n"
+              "Param total:         %d\n"
               "Global step:         %d\n"
               "Learning rate:       %.4f\n"
               "Step-time (ms):     %.4f\n"
@@ -469,7 +496,7 @@ def train():
               "--------------------------\n"
               "Val loss:            %.4f\n"
               "srnn loss:           %.4f\n"
-              "============================" % (model.global_step.eval(),
+              "============================" % (parameter_total, model.global_step.eval(),
               model.learning_rate.eval(), step_time*1000, loss,
               val_loss, srnn_loss))
         print()
@@ -539,9 +566,11 @@ def sample():
 
   actions = define_actions( FLAGS.action )
 
-  # Use the CPU if asked to
-  device_count = {"GPU": 0} if FLAGS.use_cpu else {"GPU": 1}
-  with tf.Session(config=tf.ConfigProto( device_count = device_count )) as sess:
+  # Limit TF to take a fraction of the GPU memory
+  gpu_options = tf.GPUOptions(visible_device_list=str(FLAGS.GPU),
+                              per_process_gpu_memory_fraction=1)
+
+  with tf.Session(config=tf.ConfigProto( gpu_options=gpu_options)) as sess:
 
     # === Create the model ===
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -574,10 +603,12 @@ def sample():
       encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch_srnn( test_set, action )
       forward_only = True
       srnn_seeds = True
-      srnn_loss, srnn_poses, _ = model.step(sess, encoder_inputs, decoder_inputs, decoder_outputs, forward_only, srnn_seeds)
+      srnn_loss, srnn_poses, _ = model.step(sess, encoder_inputs, decoder_inputs, 
+          decoder_outputs, forward_only, srnn_seeds)
 
       # denormalizes too
-      srnn_pred_expmap = data_utils.revert_output_format( srnn_poses, data_mean, data_std, dim_to_ignore, actions, not FLAGS.omit_one_hot )
+      srnn_pred_expmap = data_utils.revert_output_format( srnn_poses, data_mean, data_std, 
+          dim_to_ignore, actions, not FLAGS.omit_one_hot )
 
       # Save the conditioning seeds
 
@@ -673,12 +704,11 @@ def read_all_data( actions, seq_length_in, seq_length_out, data_dir, one_hot ):
   """
 
   # === Read training data ===
-  print ("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
-           seq_length_in, seq_length_out))
+  print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
+        seq_length_in, seq_length_out))
 
   train_subject_ids = [1,6,7,8,9,11]
   test_subject_ids = [5]
-
   train_set, complete_train = data_utils.load_data( data_dir, train_subject_ids, actions, one_hot )
   test_set,  complete_test  = data_utils.load_data( data_dir, test_subject_ids,  actions, one_hot )
 
