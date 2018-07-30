@@ -1,6 +1,8 @@
 ## log directories.
 logs/
 human-motion-exp/experiments/
+human-motion-exp/data/
+human-motion-exp/samples.h5
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
