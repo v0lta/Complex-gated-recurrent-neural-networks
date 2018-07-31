@@ -30,12 +30,12 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5, "Clip gradients to this norm."
 tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("iterations", int(1e5), "Iterations to train for.")
 # Architecture
-tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied].")
+tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied, fft].")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("seq_length_in", 50, "Number of frames to feed into the encoder. 25 fps")
 tf.app.flags.DEFINE_integer("seq_length_out", 10, "Number of frames that the decoder has to predict. 25fps")
-tf.app.flags.DEFINE_boolean("omit_one_hot", False, "Whether to remove one-hot encoding from the data")
+tf.app.flags.DEFINE_boolean("omit_one_hot", True, "Whether to remove one-hot encoding from the data")
 tf.app.flags.DEFINE_boolean("residual_velocities", False, "Add a residual connection that effectively models velocities")
 # Directories
 tf.app.flags.DEFINE_string("data_dir", os.path.normpath("./data/h3.6m/dataset"), "Data directory")
@@ -154,6 +154,7 @@ def train():
     # === Create the model ===
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
 
+    debug_here()
     model = create_model( sess, actions )
     model.train_writer.add_graph( sess.graph )
     print( "Model created" )
@@ -172,7 +173,7 @@ def train():
 
     parameter_total = compute_parameter_total(tf.trainable_variables())
     print("parameter total", parameter_total)
-
+    debug_here()
     for _ in range( FLAGS.iterations ):
 
       start_time = time.time()

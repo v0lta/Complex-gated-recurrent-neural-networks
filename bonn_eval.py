@@ -51,13 +51,13 @@ if __name__ == "__main__":
     GPU = 0
     memory = False
     adding = True
-    activation = mod_relu
+    activation = relu
     gate_activation = mod_sigmoid_prod
-    subfolder = 'gate_study_t250_prod_add'
+    subfolder = 'gate_study_t250_prod_mem_real'
     gpu_mem_frac = 1.0
     qr_steps = -1
     stiefel = True
-    real = False
+    real = True
     grad_clip = True
 
     # TODO remove!!

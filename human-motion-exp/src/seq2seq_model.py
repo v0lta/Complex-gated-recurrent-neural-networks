@@ -41,11 +41,12 @@ class Seq2SeqModel(object):
                residual_velocities=False,
                dtype=tf.float32,
                custom_opt=True,
-               cgru=True):
+               cgru=True,
+               window_size=10):
     """Create the model.
 
     Args:
-      architecture: [basic, tied] whether to tie the decoder and decoder.
+      architecture: [basic, tied, fft] whether to tie the decoder and decoder or use fft.
       source_seq_len: lenght of the input sequence.
       target_seq_len: lenght of the target sequence.
       rnn_size: number of units in the rnn.
@@ -152,8 +153,14 @@ class Seq2SeqModel(object):
         outputs, self.states = tf.contrib.legacy_seq2seq.rnn_decoder( dec_in, enc_state, cell, loop_function=lf ) # Decoder
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
+    elif architecture == "fft":
+
+      debug_here()
+      print("hi")
     else:
       raise(ValueError, "Unknown architecture: %s" % architecture )
+
+    debug_here()
 
     self.outputs = outputs
 

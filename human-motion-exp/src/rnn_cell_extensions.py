@@ -317,7 +317,8 @@ class ComplexGatedRecurrentUnit(RNNCell):
     Can we implement a complex GRU?
     '''
     def __init__(self, num_units, activation=mod_relu,
-                 num_proj=None, reuse=None, single_gate=True):
+                 num_proj=None, reuse=None, single_gate=True,
+                 complex_out=False):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
@@ -332,6 +333,7 @@ class ComplexGatedRecurrentUnit(RNNCell):
         self._single_gate = single_gate
         self._gate_activation = mod_sigmoid_beta
         self._single_gate_avg = False
+        self._complex_out = complex_out
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \

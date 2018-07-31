@@ -173,7 +173,7 @@ if __name__ == "__main__":
                     if dict['model'] == tf.contrib.rnn.GRUCell:
                         break
     elif prob_loop and time_loop:
-        for time_it in [100, 250, 500, 750]:
+        for time_it in [250]:
             for problem in ['adding', 'memory']:
                 if problem == 'adding':
                     adding_bool = True

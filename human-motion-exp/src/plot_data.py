@@ -2,6 +2,7 @@ import data_utils
 import numpy as np
 import scipy as sci
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 from forward_kinematics import _some_variables, fkl, revert_coordinate_space
 
@@ -12,8 +13,10 @@ act_lst = ['walking', 'eating', 'smoking', 'discussion',
            'directions', 'greeting', 'phoning', 'posing',
            'purchases', 'sitting', 'sittingdown', 'takingphoto',
            'waiting', 'walkingdog', 'walkingtogether']
+walking_lst = ['walking']
 
-def read_all_data(actions=act_lst, seq_length_in=50, seq_length_out=25, 
+
+def read_all_data(actions=walking_lst, seq_length_in=50, seq_length_out=25, 
                   data_dir="./data/h3.6m/dataset", one_hot=True):
   """
   Loads data for training/testing and normalizes it.
@@ -102,27 +105,28 @@ def get_batch(data):
 
 parent, offset, rotInd, expmapInd = _some_variables()
 train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data()
-encoder_inputs, decoder_inputs, decoder_outputs = get_batch(train_set)
-expmap_gt = train_set[list(train_set.keys())[0]]
-
-plt.imshow(encoder_inputs[0, :, :]); plt.show()
-
-batch_size, nframes, dims = encoder_inputs.shape
-
-xyz_gt = np.zeros((nframes, 96))
-for i in range(nframes):
-    xyz_gt[i,:] = fkl(expmap_gt[i,:], parent, 
-                      offset, rotInd, expmapInd)
 
 
-# === Plot and animate ===
+test_data = train_set[(1, 'walking', 1, 'even')]
+plt.imshow(np.abs(np.fft.rfft(test_data[:500, :].transpose()))[:, :]);
+plt.show()
+
+# plot the fourier domain data.
+time = test_data.shape[0]
+window_size = 50
+
 fig = plt.figure()
-ax = plt.gca(projection='3d')
-ob = viz.Ax3DPose(ax)
+im_lst = []
+for i in range(0, time // window_size - 1):
+    start = i * window_size
+    end = (i+1) * window_size
+    # print(start, end)
+    current_data = test_data[start:end, :]
+    frame = np.abs(np.fft.rfft(current_data.transpose()))
+    im = plt.imshow(frame, animated=True)
+    im_lst.append([im])
 
-# Plot the conditioning ground truth
-for i in range(nframes):
-    ob.update( xyz_gt[i,:] )
-    plt.show(block=False)
-    fig.canvas.draw()
-    plt.pause(0.01)
+ani = animation.ArtistAnimation(fig, im_lst, interval=250, repeat=False)
+plt.show()
+
+# plot a training data batch.

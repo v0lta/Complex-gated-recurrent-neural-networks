@@ -11,6 +11,9 @@ import time
 import copy
 import data_utils
 
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
+
 def fkl(angles, parent, offset, rotInd, expmapInd):
   """
   Convert joint angles and bone lenghts into the 3d points of a person.
@@ -164,6 +167,7 @@ def main():
 
   nframes_gt, nframes_pred = expmap_gt.shape[0], expmap_pred.shape[0]
 
+  # debug_here()
   # Put them together and revert the coordinate space
   expmap_all = revert_coordinate_space( np.vstack((expmap_gt, expmap_pred)), np.eye(3), np.zeros(3) )
   expmap_gt   = expmap_all[:nframes_gt,:]

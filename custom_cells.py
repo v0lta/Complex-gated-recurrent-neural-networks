@@ -646,6 +646,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._gate_activation = gate_activation
         self._single_gate = False
         self._real = real
+        self._real_double = True
 
     def to_string(self):
         cell_str = 'StiefelGatedRecurrentUnit' + '_' \
@@ -663,6 +664,8 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             cell_str += '_single_gate_'
         if self._real:
             cell_str += '_real_'
+            if self._real_double:
+                cell_str += '_realDouble_'
         return cell_str
 
     @property
@@ -691,7 +694,6 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         Complex GRU gates, the idea is that gates should make use of phase information.
         """
 
-
         with tf.variable_scope(scope, self._reuse):
             if self._real:
                 ghr = matmul_plus_bias(h, self._num_units, scope='ghr', reuse=self._reuse,
@@ -706,6 +708,23 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                        bias=True, bias_init=bias_init)
                 gz = ghz + gxz
                 z = tf.nn.sigmoid(gz)
+
+                if self._real_double:
+                    ghr2 = matmul_plus_bias(h, self._num_units, scope='ghr2',
+                                            reuse=self._reuse, bias=False)
+                    gxr2 = matmul_plus_bias(x, self._num_units, scope='gxr2',
+                                            reuse=self._reuse, bias=True,
+                                            bias_init=bias_init)
+                    gr2 = ghr2 + gxr2
+                    r = r*tf.nn.sigmoid(gr2)
+                    ghz2 = matmul_plus_bias(h, self._num_units, scope='ghz2',
+                                            reuse=self._reuse, bias=False)
+                    gxz2 = matmul_plus_bias(x, self._num_units, scope='gxz2',
+                                            reuse=self._reuse, bias=True,
+                                            bias_init=bias_init)
+                    gz2 = ghz2 + gxz2
+                    z = z*tf.nn.sigmoid(gz2)
+
             else:
                 ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
                 gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
