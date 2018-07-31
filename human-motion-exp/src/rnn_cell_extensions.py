@@ -333,7 +333,7 @@ class ComplexGatedRecurrentUnit(RNNCell):
         self._single_gate = single_gate
         self._gate_activation = mod_sigmoid_beta
         self._single_gate_avg = False
-        self._complex_out = complex_out
+        self._complex_inout = complex_out
 
     def to_string(self):
         cell_str = 'ComplexGatedRecurrentUnit' + '_' \
@@ -362,10 +362,13 @@ class ComplexGatedRecurrentUnit(RNNCell):
         if self._num_proj is None:
             return self._num_units
         else:
-            return self._output_size
+            if self._complex_inout:
+                return self._num_proj
+            else:
+                return self._num_proj
 
     def zero_state(self, batch_size, dtype=tf.float32):
-        out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
+        out = tf.zeros([batch_size, self.output_size], dtype=tf.float32)
         first_state = tf.zeros([batch_size, self._num_units])
         return URNNStateTuple(out, first_state)
 
@@ -427,6 +430,8 @@ class ComplexGatedRecurrentUnit(RNNCell):
                 cinr = matmul_plus_bias(inputs, int(self._num_units/2.0), 'real', self._reuse)
                 cini = matmul_plus_bias(inputs, int(self._num_units/2.0), 'imag', self._reuse)
                 cin = tf.complex(cinr, cini)
+            elif self._complex_inout:
+                cin = inputs
             else:
                 cin = tf.complex(inputs, tf.zeros_like(inputs))
 
@@ -470,9 +475,14 @@ class ComplexGatedRecurrentUnit(RNNCell):
             if self._num_proj is None:
                 output = new_h_real
             else:
-                output = C_to_R(new_h, self._output_size, reuse=self._reuse)
+                if self._complex_inout:
+                    output = complex_matmul(new_h, self._num_proj, scope='C_to_C_out',
+                                            reuse=self._reuse)
+                    #disassemble complex state.
+                    # output = tf.concat([tf.real(output), tf.imag(output)], -1)
+                else:
+                    output = C_to_R(new_h, self._num_proj, reuse=self._reuse)
 
-            #disassemble complex state.
             
             newstate = URNNStateTuple(output, new_h_real)
             return output, newstate

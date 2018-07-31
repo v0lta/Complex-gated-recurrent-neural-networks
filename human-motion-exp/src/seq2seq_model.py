@@ -42,11 +42,12 @@ class Seq2SeqModel(object):
                dtype=tf.float32,
                custom_opt=True,
                cgru=True,
+               fft=True,
                window_size=10):
     """Create the model.
 
     Args:
-      architecture: [basic, tied, fft] whether to tie the decoder and decoder or use fft.
+      architecture: [basic, tied] whether to tie the decoder and decoder.
       source_seq_len: lenght of the input sequence.
       target_seq_len: lenght of the target sequence.
       rnn_size: number of units in the rnn.
@@ -66,10 +67,9 @@ class Seq2SeqModel(object):
       residual_velocities: whether to use a residual connection that models velocities.
       dtype: the data type to use to store internal variables.
     """
-    if custom_opt:
-      summaries_dir += '/' + 'custom_opt'
-    if cgru:
-      summaries_dir += '/' + 'cgru'
+    if fft:
+      assert cgru == True
+
 
     self.HUMAN_SIZE = 54
     self.input_size = self.HUMAN_SIZE + number_of_actions if one_hot else self.HUMAN_SIZE
@@ -93,7 +93,12 @@ class Seq2SeqModel(object):
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     if cgru:
+      if not fft:
         cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size )
+      else:
+        num_proj = self.input_size * (window_size//2+1)
+        cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size, complex_out=fft,
+                                                              num_proj=num_proj)
     else:
         cell = tf.contrib.rnn.GRUCell( self.rnn_size )
     
@@ -125,7 +130,8 @@ class Seq2SeqModel(object):
       dec_out = tf.split(dec_out, target_seq_len, axis=0)
 
     # === Add space decoder ===
-    cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
+    if not fft:
+      cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
 
     # Finally, wrap everything in a residual layer if we want to model velocities
     if residual_velocities:
@@ -134,6 +140,35 @@ class Seq2SeqModel(object):
 
     # Store the outputs here
     outputs  = []
+
+
+    if fft:
+      assert cgru == True
+      # transform input and output.
+      fft_enc_in = []
+      for i in range(0, source_seq_len // window_size):
+        start = i * window_size
+        end = (i+1) * window_size
+        current_window = tf.stack(enc_in[start:end], axis=-1)
+        current_fft = tf.spectral.rfft(current_window)
+        batch_size = tf.shape(current_fft)[0]
+        fft_els = np.prod(current_fft.get_shape().as_list()[1:])
+        flat_fft = tf.reshape(current_fft, [batch_size, fft_els])
+        fft_enc_in.append(flat_fft)
+
+      fft_dec_in = []
+      for i in range(0, target_seq_len // window_size):
+        start = i * window_size
+        end = (i+1) * window_size
+        current_window = tf.stack(dec_in[start:end], axis=-1)
+        current_fft = tf.spectral.rfft(current_window)
+        batch_size = tf.shape(current_fft)[0]
+        fft_els = np.prod(current_fft.get_shape().as_list()[1:])
+        flat_fft = tf.reshape(current_fft, [batch_size, fft_els])
+        fft_dec_in.append(flat_fft)
+
+      enc_in = fft_enc_in
+      dec_in = fft_dec_in
 
     # Define the loss function
     lf = None
@@ -153,14 +188,26 @@ class Seq2SeqModel(object):
         outputs, self.states = tf.contrib.legacy_seq2seq.rnn_decoder( dec_in, enc_state, cell, loop_function=lf ) # Decoder
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
-    elif architecture == "fft":
-
-      debug_here()
-      print("hi")
     else:
       raise(ValueError, "Unknown architecture: %s" % architecture )
 
-    debug_here()
+
+    if fft:
+      # compute the inverse fft on the outputs and restore the shape.
+      # output shape should be [10, ?, 54]
+      ifft_out = []
+      for output in outputs:
+        # complex_result = tf.complex(output[:, :fft_els], 
+        #                             output[:, fft_els:])
+        complex_result = output
+        complex_result = tf.reshape(complex_result, [batch_size, self.input_size, 
+                                                     (window_size//2+1)])
+        real_result = tf.spectral.irfft(complex_result)
+        ifft_out.extend(tf.split(real_result, window_size, axis=-1))
+      squeeze_ifft_out = []
+      for ifft_out_el in ifft_out:
+        squeeze_ifft_out.append(tf.squeeze(ifft_out_el, axis=-1))
+      outputs = squeeze_ifft_out
 
     self.outputs = outputs
 

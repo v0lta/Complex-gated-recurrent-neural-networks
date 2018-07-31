@@ -30,7 +30,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5, "Clip gradients to this norm."
 tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("iterations", int(1e5), "Iterations to train for.")
 # Architecture
-tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied, fft].")
+tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied].")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("seq_length_in", 50, "Number of frames to feed into the encoder. 25 fps")
@@ -50,7 +50,9 @@ tf.app.flags.DEFINE_boolean("sample", False, "Set to True for sampling.")
 tf.app.flags.DEFINE_boolean("use_cpu", False, "Whether to use the CPU")
 tf.app.flags.DEFINE_integer("load", 0, "Try to load a previous checkpoint.")
 tf.app.flags.DEFINE_boolean("cgru", True, "Specify if the complex GRU should be used.")
+tf.app.flags.DEFINE_boolean("fft", False, "Do frequency domain motion analysis.")
 tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
+tf.app.flags.DEFINE_integer("window_size", 10, "Set the fft window size.")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -65,7 +67,8 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'lr_{0}'.format(FLAGS.learning_rate),
   'residual_vel' if FLAGS.residual_velocities else 'not_residual_vel',
   'custom_opt' if FLAGS.cgru else 'RMSProp',
-  'cgru' if FLAGS.cgru else 'gru'))
+  'cgru' if FLAGS.cgru else 'gru',
+  'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time'))
 
 summaries_dir = os.path.normpath(os.path.join( train_dir, "log_complex" )) # Directory for TB summaries
 
@@ -105,6 +108,8 @@ def create_model(session, actions, sampling=False):
       FLAGS.residual_velocities,
       custom_opt=FLAGS.cgru,
       cgru=FLAGS.cgru,
+      fft=FLAGS.fft,
+      window_size=FLAGS.window_size,
       dtype=tf.float32)
 
   if FLAGS.load <= 0:
@@ -154,7 +159,6 @@ def train():
     # === Create the model ===
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
 
-    debug_here()
     model = create_model( sess, actions )
     model.train_writer.add_graph( sess.graph )
     print( "Model created" )
@@ -173,7 +177,6 @@ def train():
 
     parameter_total = compute_parameter_total(tf.trainable_variables())
     print("parameter total", parameter_total)
-    debug_here()
     for _ in range( FLAGS.iterations ):
 
       start_time = time.time()
