@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_integer("save_every", 1000, "How often to compute error on t
 tf.app.flags.DEFINE_boolean("sample", False, "Set to True for sampling.")
 tf.app.flags.DEFINE_boolean("use_cpu", False, "Whether to use the CPU")
 tf.app.flags.DEFINE_integer("load", 0, "Try to load a previous checkpoint.")
-tf.app.flags.DEFINE_boolean("cgru", True, "Specify if the complex GRU should be used.")
+tf.app.flags.DEFINE_boolean("cgru", False, "Specify if the complex GRU should be used.")
 tf.app.flags.DEFINE_boolean("fft", False, "Do frequency domain motion analysis.")
 tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
 tf.app.flags.DEFINE_integer("window_size", 10, "Set the fft window size.")
@@ -213,7 +213,7 @@ def train():
 
         print()
         print("{0: <16} |".format("milliseconds"), end="")
-        for ms in [80, 160, 320, 400, 560, 1000]:
+        for ms in [80, 160, 320, 400, 560, 1000, 1500, 2000, 2500]:
           print(" {0:5d} |".format(ms), end="")
         print()
 
@@ -265,14 +265,16 @@ def train():
           # This is simply the mean error over the N_SEQUENCE_TEST examples
           mean_mean_errors = np.mean( mean_errors, 0 )
 
-          # Pretty print of the results for 80, 160, 320, 400, 560 and 1000 ms
+          # Pretty print of the results for 80, 160, 320, 400, 560 and 1000, 1500, 2000, 2500 ms
           print("{0: <16} |".format(action), end="")
-          for ms in [1,3,7,9,13,24]:
+          # for ms in [1,3,7,9,13,24]:
+          for ms in [1,3,7,9,13,24,35,47,59]:
             if FLAGS.seq_length_out >= ms+1:
               print(" {0:.3f} |".format( mean_mean_errors[ms] ), end="")
             else:
               print("   n/a |", end="")
           print()
+          # debug_here()
 
           # Ugly massive if-then to log the error to tensorboard :shrug:
           if action == "walking":
