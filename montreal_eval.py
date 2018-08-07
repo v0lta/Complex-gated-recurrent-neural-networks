@@ -22,6 +22,7 @@ from custom_cells import mod_sigmoid_prod
 from custom_cells import mod_sigmoid_sum
 from custom_cells import mod_sigmoid
 from custom_cells import mod_sigmoid_beta
+# from custom_cells import real_mod_sigmoid_beta
 
 from synthetic_experiments import main
 

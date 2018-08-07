@@ -69,6 +69,8 @@ class Seq2SeqModel(object):
     """
     if fft:
       assert cgru == True
+    if custom_opt:
+      assert cgru == True
 
 
     self.HUMAN_SIZE = 54

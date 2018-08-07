@@ -50,6 +50,7 @@ tf.app.flags.DEFINE_boolean("sample", False, "Set to True for sampling.")
 tf.app.flags.DEFINE_boolean("use_cpu", False, "Whether to use the CPU")
 tf.app.flags.DEFINE_integer("load", 0, "Try to load a previous checkpoint.")
 tf.app.flags.DEFINE_boolean("cgru", False, "Specify if the complex GRU should be used.")
+tf.app.flags.DEFINE_boolean("stiefel", False, "Use unitarity preserving weight updates.")
 tf.app.flags.DEFINE_boolean("fft", False, "Do frequency domain motion analysis.")
 tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
 tf.app.flags.DEFINE_integer("window_size", 10, "Set the fft window size.")
@@ -66,7 +67,7 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'size_{0}'.format(FLAGS.size),
   'lr_{0}'.format(FLAGS.learning_rate),
   'residual_vel' if FLAGS.residual_velocities else 'not_residual_vel',
-  'custom_opt' if FLAGS.cgru else 'RMSProp',
+  'custom_opt' if FLAGS.stiefel else 'RMSProp',
   'cgru' if FLAGS.cgru else 'gru',
   'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time'))
 
@@ -93,8 +94,8 @@ def create_model(session, actions, sampling=False):
 
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.architecture,
-      FLAGS.seq_length_in if not sampling else 50,
-      FLAGS.seq_length_out if not sampling else 100,
+      FLAGS.seq_length_in if not sampling else 61,
+      FLAGS.seq_length_out if not sampling else 60,
       FLAGS.size, # hidden layer size
       FLAGS.num_layers,
       FLAGS.max_gradient_norm,
@@ -106,7 +107,7 @@ def create_model(session, actions, sampling=False):
       len( actions ),
       not FLAGS.omit_one_hot,
       FLAGS.residual_velocities,
-      custom_opt=FLAGS.cgru,
+      custom_opt=FLAGS.stiefel,
       cgru=FLAGS.cgru,
       fft=FLAGS.fft,
       window_size=FLAGS.window_size,
@@ -142,6 +143,24 @@ def create_model(session, actions, sampling=False):
 
 def train():
   """Train a seq2seq model on human motion"""
+
+  print('params:')
+  print('arc', str(FLAGS.architecture) + '\n',
+        'seq_in', str(FLAGS.seq_length_in) + '\n',
+        'seq_out', str(FLAGS.seq_length_out) + '\n',
+        'size', str(FLAGS.size) + '\n',
+        'num_layers', str(FLAGS.num_layers) + '\n',
+        'grad_norm', str(FLAGS.max_gradient_norm) + '\n',
+        'batch_size', str(FLAGS.batch_size) + '\n',
+        'learning_rate', str(FLAGS.learning_rate) + '\n',
+        'learning_rate_decay_fctr', str(FLAGS.learning_rate_decay_factor) + '\n',
+        'loss', str(FLAGS.loss_to_use) + '\n',
+        'one_hot', str(not str(FLAGS.omit_one_hot)) + '\n',
+        'res_vels', str(FLAGS.residual_velocities) + '\n',
+        'stiefel', str(FLAGS.stiefel) + '\n',
+        'cgru', str(FLAGS.cgru) + '\n',
+        'fft', str(FLAGS.fft) + '\n',
+        'window_size', str(FLAGS.window_size))
 
   actions = define_actions( FLAGS.action )
 
@@ -268,7 +287,7 @@ def train():
           # Pretty print of the results for 80, 160, 320, 400, 560 and 1000, 1500, 2000, 2500 ms
           print("{0: <16} |".format(action), end="")
           # for ms in [1,3,7,9,13,24]:
-          for ms in [1,3,7,9,13,24,35,47,59]:
+          for ms in [1,3,7,9,13,24,36,48,59]:
             if FLAGS.seq_length_out >= ms+1:
               print(" {0:.3f} |".format( mean_mean_errors[ms] ), end="")
             else:

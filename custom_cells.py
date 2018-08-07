@@ -234,6 +234,21 @@ def mod_sigmoid_beta(z, scope='', reuse=None):
         return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
 
 
+def real_mod_sigmoid_beta(z, scope='', reuse=None):
+    """
+    Real valued ModSigmoid implementation, with uncoupled alpha and beta.
+    """
+    with tf.variable_scope('real_mod_sigmoid_beta_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        beta = tf.get_variable('beta', [], dtype=tf.float32,
+                               initializer=tf.constant_initializer(1.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        beta_norm = tf.nn.sigmoid(beta)
+        pre_act = alpha_norm*z[0] + beta_norm*z[1]
+        return tf.nn.sigmoid(pre_act)
+
+
 def mod_sigmoid_gamma(z, scope='', reuse=None):
     """
     ModSigmoid implementation, with uncoupled and unbounded
@@ -268,7 +283,7 @@ def mod_sigmoid_sum(z, scope='', reuse=None):
 
 
 def mod_sigmoid_sum_beta(z, scope='', reuse=None):
-    """ Prbobaly not a good idea."""
+    """ Probably not a good idea. """
     with tf.variable_scope('mod_sigmoid_sum_beta_' + scope, reuse=reuse):
         alpha = tf.get_variable('alpha', [], dtype=tf.float32,
                                 initializer=tf.constant_initializer(0.0))
@@ -292,7 +307,7 @@ def mod_sigmoid_split(z, scope='', reuse=None):
 
 def gate_phase_hirose(z, scope='', reuse=None):
     '''
-    Hirsoe inspired gate activation filtering according to
+    Hirose inspired gate activation filtering according to
     phase angle.
     '''
     with tf.variable_scope('phase_hirose_' + scope, reuse=reuse):
@@ -666,6 +681,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             cell_str += '_real_'
             if self._real_double:
                 cell_str += '_realDouble_'
+                cell_str += '_gate_activation_' + self._gate_activation.__name__
         return cell_str
 
     @property
@@ -716,14 +732,14 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                             reuse=self._reuse, bias=True,
                                             bias_init=bias_init)
                     gr2 = ghr2 + gxr2
-                    r = r*tf.nn.sigmoid(gr2)
+                    r = self._gate_activation([gr, gr2], 'r', self._reuse)
                     ghz2 = matmul_plus_bias(h, self._num_units, scope='ghz2',
                                             reuse=self._reuse, bias=False)
                     gxz2 = matmul_plus_bias(x, self._num_units, scope='gxz2',
                                             reuse=self._reuse, bias=True,
                                             bias_init=bias_init)
                     gz2 = ghz2 + gxz2
-                    z = z*tf.nn.sigmoid(gz2)
+                    z = self._gate_activation([gz, gz2], 'z', self._reuse)
 
             else:
                 ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
