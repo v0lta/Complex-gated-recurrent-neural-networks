@@ -70,7 +70,7 @@ if __name__ == "__main__":
     experiments_gated = []
     for i in range(0, iterations_per_exp):
         cell_fun = cc.StiefelGatedRecurrentUnit
-        #n_units = 80
+        # n_units = 80
         res = main(time_steps, n_train, n_test, n_units, learning_rate, decay,
                    batch_size, GPU, memory, adding, cell_fun, activation, gate_activation,
                    subfolder, gpu_mem_frac, qr_steps, stiefel, real, grad_clip)

@@ -40,7 +40,7 @@ class Seq2SeqModel(object):
                one_hot=True,
                residual_velocities=False,
                dtype=tf.float32,
-               custom_opt=True,
+               custom_opt=False,
                cgru=True,
                fft=True,
                window_size=10):

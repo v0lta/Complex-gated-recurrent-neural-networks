@@ -207,6 +207,33 @@ def hirose(z, scope='', reuse=None):
         return tf.multiply(rescale, z)
 
 
+def double_sigmoid(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, using a coupled alpha and beta.
+    """
+    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+        return tf.complex(tf.nn.sigmoid(tf.real(z)),
+                          tf.nn.sigmoid(tf.imag(z)))
+
+
+def single_sigmoid_real(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, using a coupled alpha and beta.
+    """
+    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+        rz = tf.nn.sigmoid(tf.real(z))
+        return tf.complex(rz, tf.zeros_like(rz))
+
+
+def single_sigmoid_imag(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, using a coupled alpha and beta.
+    """
+    iz = tf.nn.sigmoid(tf.imag(z))
+    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+        return tf.complex(iz, tf.zeros_like(iz))
+
+
 def mod_sigmoid(z, scope='', reuse=None):
     """
     ModSigmoid implementation, using a coupled alpha and beta.
@@ -628,13 +655,14 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
 
 class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     '''
-    Implementation of a Stiefel Gated Recurren unit.
+    Implementation of a Stiefel Gated Recurrent unit.
     '''
 
-    def __init__(self, num_units, activation=moebius,
-                 gate_activation=mod_sigmoid_prod,
+    def __init__(self, num_units, activation=mod_relu,
+                 gate_activation=mod_sigmoid,
                  num_proj=None, reuse=None, stiefel=True,
-                 real=False, real_double=False):
+                 real=False, real_double=False,
+                 complex_input=False):
         """
         Params:
             num_units: The size of the hidden state.
@@ -662,6 +690,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._single_gate = False
         self._real = real
         self._real_double = True
+        self._complex_input = complex_input
 
     def to_string(self):
         cell_str = 'StiefelGatedRecurrentUnit' + '_' \
@@ -787,19 +816,22 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             _, last_h = state
 
             if not self._real:
-                if self._input_fourier:
-                    cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-                    inputs = tf.fft(cinputs)
-                elif self._input_hilbert:
-                    cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-                    inputs = hilbert(cinputs)
-                elif self._input_split_matmul:
-                    # Map the inputs from R to C.
-                    cinr = matmul_plus_bias(inputs, self._num_units, 'real', self._reuse)
-                    cini = matmul_plus_bias(inputs, self._num_units, 'imag', self._reuse)
-                    inputs = tf.complex(cinr, cini)
-                else:
-                    inputs = tf.complex(inputs, tf.zeros_like(inputs))
+                if not self._complex_input:
+                    if self._input_fourier:
+                        cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+                        inputs = tf.fft(cinputs)
+                    elif self._input_hilbert:
+                        cinputs = tf.complex(inputs, tf.zeros_like(inputs))
+                        inputs = hilbert(cinputs)
+                    elif self._input_split_matmul:
+                        # Map the inputs from R to C.
+                        cinr = matmul_plus_bias(inputs, self._num_units,
+                                                'real', self._reuse)
+                        cini = matmul_plus_bias(inputs, self._num_units,
+                                                'imag', self._reuse)
+                        inputs = tf.complex(cinr, cini)
+                    else:
+                        inputs = tf.complex(inputs, tf.zeros_like(inputs))
 
             # use open gates initially when working with stiefel optimization.
             if self._stiefel:

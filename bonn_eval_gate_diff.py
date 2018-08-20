@@ -26,6 +26,10 @@ from custom_cells import mod_sigmoid_sum
 from custom_cells import mod_sigmoid
 from custom_cells import mod_sigmoid_beta
 from custom_cells import mod_sigmoid_gamma
+from custom_cells import double_sigmoid
+from custom_cells import single_sigmoid_real
+from custom_cells import single_sigmoid_imag
+
 
 from synthetic_experiments import main
 from IPython.core.debugger import Tracer
@@ -49,12 +53,12 @@ if __name__ == "__main__":
     learning_rate = 1e-3
     decay = 0.9
     batch_size = 50
-    GPU = 2
-    memory = True
-    adding = False
+    GPU = 0
+    memory = False
+    adding = True
     activation = mod_relu
     cell_fun = cc.StiefelGatedRecurrentUnit
-    subfolder = 'gate_variation_study_test_2'
+    subfolder = 'gate_variation_study_test_bk_add'
     gpu_mem_frac = 1.0
     qr_steps = -1
     stiefel = True
@@ -66,8 +70,10 @@ if __name__ == "__main__":
 
     # Research hypothesis 2. Which complex gating function performs best?
     # Run the gated case.
-    gate_act_lst = [gate_phase_hirose, mod_sigmoid_prod, mod_sigmoid_sum,
-                    mod_sigmoid, mod_sigmoid_beta, mod_sigmoid_gamma]
+    # gate_act_lst = [gate_phase_hirose, mod_sigmoid_prod, mod_sigmoid_sum,
+    #                 mod_sigmoid, mod_sigmoid_beta, mod_sigmoid_gamma]
+    gate_act_lst = [double_sigmoid, single_sigmoid_real, single_sigmoid_imag,
+                    mod_sigmoid_beta, mod_sigmoid_gamma]
     experiments = []
     for gate_act in gate_act_lst:
         experiments_gated = []

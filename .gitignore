@@ -6,6 +6,7 @@ human-motion-exp/experiments_rebuttal/
 human-motion-exp/data/
 human-motion-exp/samples.h5
 music_exp/raw_data/
+music_exp/numpy/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

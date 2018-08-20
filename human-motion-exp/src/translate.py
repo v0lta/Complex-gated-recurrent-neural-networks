@@ -95,7 +95,7 @@ def create_model(session, actions, sampling=False):
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.architecture,
       FLAGS.seq_length_in if not sampling else 61,
-      FLAGS.seq_length_out if not sampling else 60,
+      FLAGS.seq_length_out if not sampling else 90,
       FLAGS.size, # hidden layer size
       FLAGS.num_layers,
       FLAGS.max_gradient_norm,

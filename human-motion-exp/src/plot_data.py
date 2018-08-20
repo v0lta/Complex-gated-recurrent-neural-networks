@@ -108,8 +108,9 @@ train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_d
 
 
 test_data = train_set[(1, 'walking', 1, 'even')]
-plt.imshow(np.abs(np.fft.rfft(test_data[:500, :].transpose()))[:, :]);
+plt.imshow(np.log(np.abs(np.fft.rfft(test_data[:500, :].transpose()))[:-2, :-2]));
 plt.show()
+# debug_here()
 
 # plot the fourier domain data.
 time = test_data.shape[0]
