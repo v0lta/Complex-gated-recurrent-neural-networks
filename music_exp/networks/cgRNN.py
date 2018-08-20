@@ -11,6 +11,10 @@ import custom_cells as cc
 import custom_optimizers as co
 debug_here = Tracer()
 
+
+# where to store the logfiles.
+subfolder = 'initial_exps'
+
 # Load the data.
 d = 2048        # input dimensions -> Window size
 m = 128         # number of notes
@@ -102,6 +106,7 @@ with train_graph.as_default():
     y, final_state = tf.nn.dynamic_rnn(cell, xf, dtype=tf.float32)
     # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
     L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
+    tf.summary.scalar('mean squared error', L)
     optimizer = tf.train.RMSPropOptimizer(learning_rate)
     gvs = optimizer.compute_gradients(L)
     # print(gvs)
@@ -112,6 +117,8 @@ with train_graph.as_default():
                                               global_step=global_step)
     # training_step = optimizer.minimize(L)
     init_op = tf.global_variables_initializer()
+    summary_op = tf.summary.merge_all()
+    saver = tf.train.Saver()
 
 
 def get_batch(data, data_indices, batch_size):
@@ -140,6 +147,13 @@ def get_batch(data, data_indices, batch_size):
     return batch_time_music, batched_time_labels
 
 
+time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+param_str = 'lr_' + str(learning_rate) + '_size_' + str(cell_size) \
+            + '_layers_' + str(1)
+savedir = '../logs' + '/' + subfolder + '/' + time_str \
+          + '_' + param_str
+summary_writer = tf.summary.FileWriter(savedir, graph=train_graph)
+
 square_error = []
 average_precision = []
 gpu_options = tf.GPUOptions(visible_device_list=str(GPU))
@@ -160,13 +174,12 @@ with tf.Session(graph=train_graph, config=config) as sess:
                                                        y_: batched_time_labels_test})
                                 / batch_time_music_test.shape[0])
             Yhattestbase = sess.run(y, feed_dict={x: batch_time_music_test})
-            yflat = batched_time_labels_test.flatten()
-            yhatflat = Yhattestbase.flatten()
+            yflat = batched_time_labels_test[:, -1, :].flatten()
+            yhatflat = Yhattestbase[:, -1, :].flatten()
             average_precision.append(average_precision_score(yflat,
                                                              yhatflat))
-            # debug_here()
 
-        if i % 10000 == 0:
+        if i % 5000 == 0:
             end = time()
             print(i, '\t', round(square_error[-1], 8),
                      '\t', round(average_precision[-1], 8),
@@ -178,5 +191,6 @@ with tf.Session(graph=train_graph, config=config) as sess:
         loss, out_net, out_gt, _ = sess.run([L, y, y_, training_step],
                                             feed_dict={x: batch_time_music,
                                                        y_: batched_time_labels})
-        # debug_here()
-        print(i, loss)
+
+    # save the network
+    saver.save(sess, savedir)
