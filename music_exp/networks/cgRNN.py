@@ -33,7 +33,7 @@ window_size = d
 stride = 512
 
 # Training parameters:
-GPU = 7
+GPU = 0
 learning_rate = 0.0001
 learning_rate_decay = 0.9
 iterations = 250000
@@ -192,7 +192,7 @@ time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
             + '_size_' + str(cell_size) \
             + '_layers_' + str(1) + '_loss_' + str(L.name[:-8])
-savedir = '../logs' + '/' + subfolder + '/' + time_str \
+savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
 summary_writer = tf.summary.FileWriter(savedir, graph=train_graph)
 
@@ -209,14 +209,14 @@ with tf.Session(graph=train_graph, config=config) as sess:
 
     print('Training...')
     for i in range(iterations):
-        if i % 1000 == 0 and (i != 0 or len(square_error) == 0):
+        if i % 100 == 0 and (i != 0 or len(square_error) == 0):
             batch_time_music_test, batched_time_labels_test = \
                 get_batch(test_data, test_ids, batch_size)
             feed_dict = {x: batch_time_music_test, y_: batched_time_labels_test}
-            L, test_summary_eval, global_step_eval = sess.run([L, test_summary,
-                                                               global_step],
-                                                              feed_dict=feed_dict)
-            square_error.append(L)
+            L_np, test_summary_eval, global_step_eval = sess.run([L, test_summary,
+                                                                 global_step],
+                                                                 feed_dict=feed_dict)
+            square_error.append(L_np)
             summary_writer.add_summary(test_summary_eval, global_step=global_step_eval)
 
         if i % 5000 == 0:
@@ -227,7 +227,9 @@ with tf.Session(graph=train_graph, config=config) as sess:
             for i in range(len(batched_time_music_lst)):
                 batch_time_music = batched_time_music_lst[i]
                 batched_time_labels = batcheded_time_labels_lst[i]
-                loss, Yhattest = sess.run([L, y], feed_dict={x: batch_time_music_test})
+                loss, Yhattest, np_global_step =  \
+                    sess.run([L, y, global_step], feed_dict={x: batch_time_music,
+                                                             y_: batched_time_labels})
                 yhatflat = np.append(yhatflat, Yhattest[:, -1, :].flatten())
                 yflat = np.append(yflat, batched_time_labels[:, -1, :].flatten())
                 losses_lst.append(loss)
@@ -237,6 +239,7 @@ with tf.Session(graph=train_graph, config=config) as sess:
             print(i, '\t', round(np.mean(losses_lst), 8),
                      '\t', round(average_precision[-1], 8),
                      '\t', round(end-start, 8))
+            saver.save(sess, savedir, global_step=np_global_step)
             start = time.time()
         batch_time_music, batched_time_labels = \
             get_batch(train_data, train_ids, batch_size)

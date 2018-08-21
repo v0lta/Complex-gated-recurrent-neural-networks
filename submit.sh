@@ -1,4 +1,4 @@
-#block(name=cgRNN_exp2, threads=2, memory=7500, subtasks=1, hours=68, gpus=1)
+#block(name=gate_study_bk, threads=2, memory=7500, subtasks=1, hours=68, gpus=1)
     echo "process subtask $SUBTASK_ID of $N_SUBTASKS"
     ipython bonn_eval_gate_diff.py
     # ipython montreal_eval.py -- --adding loop --memory loop --time_steps -1 --stiefel True --real False --non_linearity hirose --gate_non_linearity mod_sigmoid_prod --model sGRU --GPU 0 --subfolder=rebuttal_syn_cpx_250 --n_units 250
