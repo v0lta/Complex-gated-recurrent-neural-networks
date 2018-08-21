@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # cell_fun=tf.contrib.rnn.LSTMCell
 
     # iterations_per_exp = 2
-    iterations_per_exp = 20
+    iterations_per_exp = 7
 
     time_steps = 250
     # time_steps = 100
@@ -54,11 +54,11 @@ if __name__ == "__main__":
     decay = 0.9
     batch_size = 50
     GPU = 0
-    memory = False
-    adding = True
+    memory = True
+    adding = False
     activation = mod_relu
     cell_fun = cc.StiefelGatedRecurrentUnit
-    subfolder = 'gate_variation_study_test_bk_add'
+    subfolder = 'gate_variation_study_test_bk'
     gpu_mem_frac = 1.0
     qr_steps = -1
     stiefel = True
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     # Run the gated case.
     # gate_act_lst = [gate_phase_hirose, mod_sigmoid_prod, mod_sigmoid_sum,
     #                 mod_sigmoid, mod_sigmoid_beta, mod_sigmoid_gamma]
-    gate_act_lst = [double_sigmoid, single_sigmoid_real, single_sigmoid_imag,
+    gate_act_lst = [single_sigmoid_real, single_sigmoid_imag,
                     mod_sigmoid_beta, mod_sigmoid_gamma]
     experiments = []
     for gate_act in gate_act_lst:
