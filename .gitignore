@@ -8,6 +8,7 @@ human-motion-exp/samples.h5
 music_exp/raw_data/
 music_exp/numpy/
 music_exp/logs/
+music_exp/thickstun/
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
