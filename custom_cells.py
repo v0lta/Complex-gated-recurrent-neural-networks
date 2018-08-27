@@ -220,7 +220,7 @@ def single_sigmoid_real(z, scope='', reuse=None):
     """
     ModSigmoid implementation, using a coupled alpha and beta.
     """
-    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+    with tf.variable_scope('sigmoid_real_' + scope, reuse=reuse):
         rz = tf.nn.sigmoid(tf.real(z))
         return tf.complex(rz, tf.zeros_like(rz))
 
@@ -229,8 +229,8 @@ def single_sigmoid_imag(z, scope='', reuse=None):
     """
     ModSigmoid implementation, using a coupled alpha and beta.
     """
-    iz = tf.nn.sigmoid(tf.imag(z))
-    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+    with tf.variable_scope('sigmoid_imag_' + scope, reuse=reuse):
+        iz = tf.nn.sigmoid(tf.imag(z))       
         return tf.complex(iz, tf.zeros_like(iz))
 
 
@@ -720,7 +720,10 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     @property
     def output_size(self):
         if self._output_size is None:
-            return self._num_units
+            if self._real:
+                return self._num_units
+            else:
+                return self._num_units*2
         else:
             return self._output_size
 
@@ -729,9 +732,12 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
             first_state = tf.zeros([batch_size, self._num_units])
         else:
-            out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
             first_state = tf.complex(tf.zeros([batch_size, self._num_units]),
                                      tf.zeros([batch_size, self._num_units]))
+            if self._output_size:
+                out = tf.zeros([batch_size, self._output_size], dtype=tf.float32)
+            else:
+                out = tf.zeros([batch_size, self._num_units*2])
         return URNNStateTuple(out, first_state)
 
     def double_memory_gate(self, h, x, scope, bias_init=4.0):
@@ -864,10 +870,16 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
 
                 h_bar = self._activation(tmp)
             new_h = (1 - z)*last_h + z*h_bar
-            if self._real:
-                output = matmul_plus_bias(new_h, self.output_size, 'out_map',
-                                          reuse=self._reuse)
+
+            if self._output_size:
+                print('c to r cell output mapping.')
+                if self._real:
+                    output = matmul_plus_bias(new_h, self._output_size, 'out_map',
+                                              reuse=self._reuse)
+                else:
+                    output = C_to_R(new_h, self._output_size, reuse=self._reuse)
             else:
-                output = C_to_R(new_h, self._output_size, reuse=self._reuse)
+                print('real concatinated cell output')
+                output = tf.concat([tf.real(new_h), tf.imag(new_h)], axis=-1)
             newstate = URNNStateTuple(output, new_h)
             return output, newstate

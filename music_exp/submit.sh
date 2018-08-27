@@ -1,3 +1,3 @@
-#block(name=cgRNN_exp2, threads=2, memory=50000, subtasks=1, hours=68, gpus=1)
+#block(name=cgRNN_exp2_tfk, threads=2, memory=7500, subtasks=1, hours=68, gpus=1)
     echo "process subtask $SUBTASK_ID of $N_SUBTASKS"
-    ipython ./networks/cgRNN.py
+    ipython ./networks/cnn.py

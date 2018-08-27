@@ -1,218 +1,209 @@
 # Do the imports.
 import sys
 import time
+import pickle
 import numpy as np
 import tensorflow as tf
+from custom_conv import complex_conv1D
 # from scipy.fftpack import fft
 from sklearn.metrics import average_precision_score
 from IPython.core.debugger import Tracer
+from music_net_handler import MusicNet
 sys.path.insert(0, "../")
 import custom_cells as cc
+
 # import custom_optimizers as co
 debug_here = Tracer()
 
 
 # where to store the logfiles.
-subfolder = 'test'
+subfolder = 'cCNN_cgRNN'
 
-# Load the data.
-d = 2048        # input dimensions -> Window size
 m = 128         # number of notes
 fs = 44100      # samples/second
 features_idx = 0    # first element of (X,Y) data tuple
 labels_idx = 1      # second element of (X,Y) data tuple
 
-# RNN parameters:
+# Network parameters:
 c = 24            # number of context vectors
-cell_size = 2048  # complex RNN cell state size
-stiefel = False   # Do not use stiefel weight normalization.
-batch_size = 50   # The number of data points to be processed in parallel.
+batch_size = 5      # The number of data points to be processed in parallel.
+d = 512            # CNN filter depth.
+filter_width = 500  # cnn filter length
+stride = 512
+filter_width_2 = 16
+stride2 = 16
+
+cell_size = 512       # cell depth.
+bidirectional = True
+CNN = False
+# TODO: Downsampling!!!!!
+
+RNN = True
+stiefel = False
 
 # FFT parameters:
-window_size = d
-stride = 512
+# window_size = 16384
+window_size = 2048
+sampling_rate = 11000
 
 # Training parameters:
-GPU = 0
 learning_rate = 0.0001
 learning_rate_decay = 0.9
 iterations = 250000
-concat_y = True
-sample_prob_y = 0.8
-
-# Warning: the full dataset is over 40GB. Make sure you have enough RAM!
-# This can take a few minutes to load
-train_data = dict(np.load(open('numpy/musicnet.npz', 'rb'), encoding='latin1'))
-
-print('musicnet loaded.')
-# split our the test set
-test_data = dict()
-for id in (2303, 2382, 1819):  # test set
-    test_data[str(id)] = train_data.pop(str(id))
-
-train_ids = list(train_data.keys())
-test_ids = list(test_data.keys())
-
-print('splitting done.')
-print(len(train_data))
-print(len(test_data))
+GPU = [4]
 
 
-# data selection funciton
-def select(data, index, window, c):
-    time_music = []
-    labels = []
-    for cx in range(0, c):
-            start = index - (c - cx)*stride
-            center = start + int(window_size/2)
-            end = start + window_size
-            time_data = data[features_idx][start:end]
-            # label stuff that's on in the center of the window
-            label_vec = np.zeros([m])
-            for active_label in data[labels_idx][center]:
-                label_vec[active_label.data[1]] = 1
-            time_music.append(time_data)
-            labels.append(label_vec)
-    return np.array(time_music), np.array(labels)
+def compute_parameter_total(trainable_variables):
+    total_parameters = 0
+    for variable in trainable_variables:
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        # print('var_name', variable.name, 'shape', shape, 'dim', len(shape))
+        variable_parameters = 1
+        for dim in shape:
+            # print(dim)
+            variable_parameters *= dim.value
+        # print('parameters', variable_parameters)
+        total_parameters += variable_parameters
+    print('total:', total_parameters)
+    return total_parameters
 
 
-def get_batch(data, data_indices, batch_size):
-    """
-    Get a training batch.
-    Args:
-        data: Dictionary {file_id, time_domain_numpy_array}
-        data_indices: The file_id dictionary keys for data.
-        batch_size: The batch size used in the graph.
-    Returns:
-        batch_time_music: (batch_size, c, d) array with time
-                          domain data.
-        batched_time_labels: (batch_size, c, m) array labels.
-    """
-    batch_time_music = []
-    batched_time_labels = []
-    batched = 0
-    while batched < batch_size:
-        # select a random recording from the data-set.
-        dat_idx = np.random.randint(0, len(data_indices))
-        # go to a random position in the recording.
-        record_with_label = data[data_indices[dat_idx]]
-        offset = d/2 + c*window_size
-        rec_idx = np.random.randint(offset, len(record_with_label[features_idx])-d/2)
-        time_music, labels = select(record_with_label, rec_idx, window_size, c)
-        if time_music.shape == (c, d) and labels.shape == (c, m):
-            batch_time_music.append(time_music)
-            batched_time_labels.append(labels)
-            batched += 1
-        else:
-            pass
-            # print('skipping sample.')
-
-    batch_time_music = np.array(batch_time_music)
-    batched_time_labels = np.array(batched_time_labels)
-
-    # check the shapes.
-    assert (batch_time_music.shape == (batch_size, c, d)
-            and batched_time_labels.shape == (batch_size, c, m))
-    return batch_time_music, batched_time_labels
-
-
-def get_test_batches(data, data_indices, batch_size):
-    """
-    Set up the test set lists.
-    """
-    Xtest = []
-    Ytest = []
-    for dat_idx in data_indices:
-        for j in range(7500):
-            # start from one second to give us some room for larger segments
-            rec_idx = fs+j*512
-            record_with_label = data[dat_idx]
-            time_music, labels = select(record_with_label, rec_idx, window_size, c)
-            Xtest.append(time_music)
-            Ytest.append(labels)
-    Xtest = np.array(Xtest)
-    Ytest = np.array(Ytest)
-    # Reshape and check the shapes.
-    batched_time_music_lst = np.split(Xtest, int(Xtest.shape[0]/batch_size), axis=0)
-    batcheded_time_labels_lst = np.split(Ytest, int(Xtest.shape[0]/batch_size), axis=0)
-    assert len(batched_time_music_lst) == len(batcheded_time_labels_lst)
-    return batched_time_music_lst, batcheded_time_labels_lst
-
-
-batched_time_music_lst, batcheded_time_labels_lst = get_test_batches(test_data, test_ids,
-                                                                     batch_size)
-
-
-print('setting up the tensorflow graph.')
+print('Setting up the tensorflow graph.')
 train_graph = tf.Graph()
 with train_graph.as_default():
     global_step = tf.Variable(0, trainable=False, name='global_step')
     # We use c input windows to give the RNN acces to context.
-    x = tf.placeholder(tf.float32, shape=[batch_size, c, d])
+    x = tf.placeholder(tf.float32, shape=[batch_size, c, window_size])
     # The ground labelling is used during traning, wich random sampling
     # from the network output.
-    y_ = tf.placeholder(tf.float32, shape=[batch_size, c, m])
+    y_gt = tf.placeholder(tf.float32, shape=[batch_size, c, m])
 
     # compute the fft in the time domain data.
     # x = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
     xf = tf.spectral.rfft(x)
-
-    # TODO: concatenate y_ and write an,
-    # RNN wrapper to sample from the RNN output.
-
-    # initial_state = tf.get_variable('initial_state', [batch_size, cell_size])
-    cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size, stiefel=stiefel,
-                                        num_proj=m, complex_input=True)
-    y, final_state = tf.nn.dynamic_rnn(cell, xf, dtype=tf.float32)
-    # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
-    # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
-    L = tf.losses.mean_squared_error(y_[:, -1, :], y[:, -1, :])
-    tf.summary.scalar('mean_squared_error', L)
 
     dec_learning_rate = tf.train.exponential_decay(learning_rate, global_step,
                                                    50000, learning_rate_decay,
                                                    staircase=True)
     optimizer = tf.train.RMSPropOptimizer(dec_learning_rate)
     tf.summary.scalar('learning_rate', dec_learning_rate)
+
+    if CNN:
+        with tf.variable_scope('complex_CNN'):
+            xfd = tf.reshape(xf, [batch_size*c, -1])
+            xfd = tf.expand_dims(xfd, -1)
+            conv1 = complex_conv1D(xfd, filter_width=filter_width, depth=d, stride=stride,
+                                   padding='VALID', scope='_layer1')
+            conv1 = cc.split_relu(conv1)
+            conv2 = complex_conv1D(conv1, filter_width=filter_width_2, depth=d,
+                                   stride=stride2, padding='VALID', scope='_layer2')
+            conv2 = cc.split_relu(conv2)
+            print('conv2 shape', conv2)
+            flat = tf.reshape(conv2, [batch_size, c, -1])
+            RNN_in = flat
+    else:
+        RNN_in = xf
+
+    if RNN:
+        if bidirectional:
+            cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size,
+                                                stiefel=stiefel,
+                                                num_proj=None,
+                                                complex_input=True)
+            # Bidirectional RNN encoder.
+            outputs, states = tf.nn.bidirectional_dynamic_rnn(
+                cell, cell, RNN_in, dtype=tf.float32)
+            to_decode = tf.concat([tf.complex(outputs[0][:, :, :cell_size],
+                                              outputs[0][:, :, cell_size:]),
+                                   tf.complex(outputs[1][:, :, :cell_size],
+                                              outputs[1][:, :, cell_size:])],
+                                  axis=-1)
+            # RNN decoder.
+            decoder_cell = cc.StiefelGatedRecurrentUnit(
+                num_units=int(cell_size), stiefel=stiefel, num_proj=m,
+                complex_input=True)
+            y, final_state = tf.nn.dynamic_rnn(decoder_cell, to_decode,
+                                               dtype=tf.float32)
+            y_sel = y
+            y_gt_sel = y_gt
+        else:
+            cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size,
+                                                stiefel=stiefel,
+                                                num_proj=m,
+                                                complex_input=True)
+            y, final_state = \
+                tf.nn.dynamic_rnn(cell, xf, dtype=tf.float32)
+            y_sel = y[:, -1, :]
+            y_gt_sel = y_gt[:, -1, :]
+    else:
+        if c != 1:
+            raise ValueError("c must be one for non RNN networks.")
+        y = tf.nn.sigmoid(cc.C_to_R(flat, m, reuse=None))
+        y_sel = y[:, -1, :]
+        y_gt_sel = y_gt[:, -1, :]
+
+    # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
+    # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
+    L = tf.losses.mean_squared_error(y_gt_sel, y_sel)
     gvs = optimizer.compute_gradients(L)
+    tf.summary.scalar('mean_squared_error', L)
     # print(gvs)
-    capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-    # capped_gvs = [(tf.clip_by_norm(grad, 2.0), var) for grad, var in gvs]
-    # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
-    training_step = optimizer.apply_gradients(capped_gvs,
-                                              global_step=global_step)
+    with tf.variable_scope("gradient_clipping"):
+        capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+        # capped_gvs = [(tf.clip_by_norm(grad, 2.0), var) for grad, var in gvs]
+        # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
+        training_step = optimizer.apply_gradients(capped_gvs,
+                                                  global_step=global_step)
     # training_step = optimizer.minimize(L)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
     saver = tf.train.Saver()
     test_summary = tf.summary.scalar('test_mse', L)
+    parameter_total = compute_parameter_total(tf.trainable_variables())
 
+# Load the data.
+print('Loading music-Net...')
+musicNet = MusicNet(c, window_size, window_size, sampling_rate=sampling_rate)
+batched_time_music_lst, batcheded_time_labels_lst = musicNet.get_test_batches(batch_size)
+
+print('parameters:', m, fs, features_idx, labels_idx, c, batch_size, filter_width,
+      filter_width_2, d, window_size, stride, stride2, learning_rate, learning_rate_decay,
+      iterations, GPU, CNN, bidirectional, parameter_total)
 
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
-            + '_size_' + str(cell_size) \
-            + '_layers_' + str(1) + '_loss_' + str(L.name[:-8])
+            + '_bs_' + str(batch_size) + '_ws_' + str(window_size) + '_depth_' + str(d)
+if CNN:
+    param_str += '_fw1_' + str(filter_width) + '_fw2_' + str(filter_width_2) \
+        + '_str1_' + str(stride) + '_str2_' + str(stride2)
+param_str += '_layers_' + str(1) + '_loss_' + str(L.name[:-8]) \
+             + '_cnn_' + str(CNN) + '_bidirectional_' + str(bidirectional) \
+             + '_cs_' + str(cell_size) \
+             + '_totparam_' + str(parameter_total)
 savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
 summary_writer = tf.summary.FileWriter(savedir, graph=train_graph)
 
 square_error = []
 average_precision = []
-gpu_options = tf.GPUOptions(visible_device_list=str(GPU))
+gpu_options = tf.GPUOptions(visible_device_list=str(GPU)[1:-1])
 config = tf.ConfigProto(allow_soft_placement=True,
                         log_device_placement=False,
                         gpu_options=gpu_options)
 with tf.Session(graph=train_graph, config=config) as sess:
     start = time.time()
-    print('initialize')
+    print('Initialize...')
     init_op.run(session=sess)
 
     print('Training...')
     for i in range(iterations):
         if i % 100 == 0 and (i != 0 or len(square_error) == 0):
             batch_time_music_test, batched_time_labels_test = \
-                get_batch(test_data, test_ids, batch_size)
-            feed_dict = {x: batch_time_music_test, y_: batched_time_labels_test}
+                musicNet.get_batch(musicNet.test_data, musicNet.test_ids,
+                                   batch_size)
+            feed_dict = {x: batch_time_music_test,
+                         y_gt: batched_time_labels_test}
             L_np, test_summary_eval, global_step_eval = sess.run([L, test_summary,
                                                                  global_step],
                                                                  feed_dict=feed_dict)
@@ -224,13 +215,14 @@ with tf.Session(graph=train_graph, config=config) as sess:
             yflat = np.array([])
             yhatflat = np.array([])
             losses_lst = []
-            for i in range(len(batched_time_music_lst)):
-                batch_time_music = batched_time_music_lst[i]
-                batched_time_labels = batcheded_time_labels_lst[i]
+            for j in range(len(batched_time_music_lst)):
+                batch_time_music = batched_time_music_lst[j]
+                batched_time_labels = batcheded_time_labels_lst[j]
+                feed_dict = {x: batch_time_music,
+                             y_gt: batched_time_labels}
                 loss, Yhattest, np_global_step =  \
-                    sess.run([L, y, global_step], feed_dict={x: batch_time_music,
-                                                             y_: batched_time_labels})
-                yhatflat = np.append(yhatflat, Yhattest[:, -1, :].flatten())
+                    sess.run([L, y, global_step], feed_dict=feed_dict)
+                yhatflat = np.append(yhatflat, Yhattest.flatten())
                 yflat = np.append(yflat, batched_time_labels[:, -1, :].flatten())
                 losses_lst.append(loss)
             average_precision.append(average_precision_score(yflat,
@@ -239,15 +231,18 @@ with tf.Session(graph=train_graph, config=config) as sess:
             print(i, '\t', round(np.mean(losses_lst), 8),
                      '\t', round(average_precision[-1], 8),
                      '\t', round(end-start, 8))
-            saver.save(sess, savedir, global_step=np_global_step)
+            saver.save(sess, savedir + '/weights', global_step=np_global_step)
             start = time.time()
+
         batch_time_music, batched_time_labels = \
-            get_batch(train_data, train_ids, batch_size)
-        # debug_here()
+            musicNet.get_batch(musicNet.train_data, musicNet.train_ids, batch_size)
+        feed_dict = {x: batch_time_music,
+                     y_gt: batched_time_labels}
         loss, out_net, out_gt, _, summaries, np_global_step = \
-            sess.run([L, y, y_, training_step, summary_op, global_step],
-                     feed_dict={x: batch_time_music, y_: batched_time_labels})
+            sess.run([L, y, y_gt, training_step, summary_op, global_step],
+                     feed_dict=feed_dict)
         summary_writer.add_summary(summaries, global_step=np_global_step)
 
     # save the network
-    saver.save(sess, savedir)
+    saver.save(sess, savedir + '/weights', global_step=np_global_step)
+    pickle.dump(average_precision, open(savedir + "avgprec.pkl", "wb"))
