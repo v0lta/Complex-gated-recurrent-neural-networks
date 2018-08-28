@@ -117,8 +117,11 @@ class MusicNet(object):
         if self._fs == 44100:
             for dat_idx in data_indices:
                 for j in range(7500):
-                    # start from one second to give us some room for larger segments
-                    rec_idx = self._fs+j*512
+                    if (1.0/self._fs)*self._window_size*self._c > 1.0:
+                        rec_idx = self._window_size*self._c + j*512
+                    else:
+                        # start from one second to give us some room for larger segments
+                        rec_idx = self._fs + j*512
                     record_with_label = data[dat_idx]
                     time_music, labels = self.select(record_with_label, rec_idx)
                     Xtest.append(time_music)
