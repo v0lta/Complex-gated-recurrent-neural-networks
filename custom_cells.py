@@ -10,6 +10,8 @@ import tensorflow as tf
 from tensorflow import random_uniform_initializer as urnd_init
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
+
+from custom_regularizers import complex_dropout
 _URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
 
 
@@ -230,7 +232,7 @@ def single_sigmoid_imag(z, scope='', reuse=None):
     ModSigmoid implementation, using a coupled alpha and beta.
     """
     with tf.variable_scope('sigmoid_imag_' + scope, reuse=reuse):
-        iz = tf.nn.sigmoid(tf.imag(z))       
+        iz = tf.nn.sigmoid(tf.imag(z))
         return tf.complex(iz, tf.zeros_like(iz))
 
 
@@ -662,7 +664,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                  gate_activation=mod_sigmoid,
                  num_proj=None, reuse=None, stiefel=True,
                  real=False, real_double=False,
-                 complex_input=False):
+                 complex_input=False, dropout=False):
         """
         Params:
             num_units: The size of the hidden state.
@@ -689,8 +691,9 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._gate_activation = gate_activation
         self._single_gate = False
         self._real = real
-        self._real_double = True
+        self._real_double = False
         self._complex_input = complex_input
+        self._dropout = dropout
 
     def to_string(self):
         cell_str = 'StiefelGatedRecurrentUnit' + '_' \
@@ -839,6 +842,10 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                     else:
                         inputs = tf.complex(inputs, tf.zeros_like(inputs))
 
+            if self._dropout:
+                print('adding dropout!')
+                inputs = complex_dropout(inputs, 0.2)
+
             # use open gates initially when working with stiefel optimization.
             if self._stiefel:
                 bias_init = 4.0
@@ -869,6 +876,11 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                     tmp = cinWx + rhU
 
                 h_bar = self._activation(tmp)
+
+                if self._dropout:
+                    print('adding dropout!')
+                    h_bar = complex_dropout(h_bar, 0.25)
+
             new_h = (1 - z)*last_h + z*h_bar
 
             if self._output_size:

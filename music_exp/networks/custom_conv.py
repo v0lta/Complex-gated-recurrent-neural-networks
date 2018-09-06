@@ -28,3 +28,13 @@ def complex_conv1D(h, filter_width, depth, stride, padding, scope='', reuse=None
             xB = tf.nn.conv1d(value=x, filters=B, stride=stride, padding=padding)
             yB = tf.nn.conv1d(value=y, filters=B, stride=stride, padding=padding)
             return tf.complex(xA - yB, xB + yA)
+
+
+def complex_max_pool1d(h, ksize, strides, padding, scope=None):
+    """
+    Complex pooling.
+    """
+    with tf.variable_scope('complex_max_pool1d' + scope):
+        real_pool = tf.nn.max_pool(tf.expand_dims(tf.real(h), 1), ksize, strides, padding)
+        imag_pool = tf.nn.max_pool(tf.expand_dims(tf.imag(h), 1), ksize, strides, padding)
+        return tf.complex(real_pool, imag_pool)

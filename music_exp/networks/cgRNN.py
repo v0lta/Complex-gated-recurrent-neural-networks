@@ -25,31 +25,31 @@ features_idx = 0    # first element of (X,Y) data tuple
 labels_idx = 1      # second element of (X,Y) data tuple
 
 # Network parameters:
-c = 24            # number of context vectors
+c = 24              # number of context vectors
 batch_size = 5      # The number of data points to be processed in parallel.
-d = 3            # CNN filter depth.
-filter_width = 3  # cnn filter length
-stride = 2
-filter_width_2 = 3
-stride2 = 2
+d = [4, 8, 16]            # CNN filter depth.
+filter_width = [3, 3, 3]  # cnn filter length
+stride = [2, 2, 2]
+assert len(d) == len(filter_width)
+assert len(filter_width) == len(stride)
 
-cell_size = 1024       # cell depth.
-bidirectional = True
+cell_size = 1296       # cell depth.
 CNN = True
 RNN = True
 stiefel = False
+dropout = True
 
 # FFT parameters:
 # window_size = 16384
-window_size = 4096
-
+# window_size = 4096
+window_size = 2048
 
 # Training parameters:
-learning_rate = 0.0001
+learning_rate = 0.0002
 learning_rate_decay = 0.9
-decay_iterations = 15000
-iterations = 250000
-GPU = [5]
+decay_iterations = 50000
+iterations = 350000
+GPU = [4]
 
 
 def compute_parameter_total(trainable_variables):
@@ -79,7 +79,7 @@ with train_graph.as_default():
     y_gt = tf.placeholder(tf.float32, shape=[batch_size, c, m])
 
     # compute the fft in the time domain data.
-    # x = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
+    # xf = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
     xf = tf.spectral.rfft(x)
 
     dec_learning_rate = tf.train.exponential_decay(learning_rate, global_step,
@@ -92,24 +92,23 @@ with train_graph.as_default():
         with tf.variable_scope('complex_CNN'):
             xfd = tf.reshape(xf, [batch_size*c, -1])
             xfd = tf.expand_dims(xfd, -1)
-            conv1 = complex_conv1D(xfd, filter_width=filter_width, depth=d, stride=stride,
-                                   padding='VALID', scope='_layer1')
-            conv1 = cc.split_relu(conv1)
-            if filter_width_2 and stride2:
-                conv2 = complex_conv1D(conv1, filter_width=filter_width_2, depth=d,
-                                       stride=stride2, padding='VALID', scope='_layer2')
-                conv2 = cc.split_relu(conv2)
-                print('conv2 shape', conv2)
-            flat = tf.reshape(conv2, [batch_size, c, -1])
+
+            conv = [xfd]
+            for layer_no, layer_d in enumerate(d):
+                conv_tmp = complex_conv1D(conv[-1], filter_width=filter_width[layer_no],
+                                          depth=layer_d, stride=stride[layer_no],
+                                          padding='VALID', scope='_layer' + str(layer_no))
+                conv.append(cc.split_relu(conv_tmp))
+                print('conv2 shape', conv[-1].shape)
+            flat = tf.reshape(conv[-1], [batch_size, c, -1])
             RNN_in = flat
     else:
         RNN_in = xf
     if RNN:
-        if bidirectional:
-            cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size,
-                                                stiefel=stiefel,
-                                                num_proj=None,
-                                                complex_input=True)
+        def define_bidirecitonal(RNN_in, cell_size, stiefel, dropout, reuse=None):
+            cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size, stiefel=stiefel,
+                                                num_proj=None, complex_input=True,
+                                                dropout=dropout, reuse=reuse)
             # Bidirectional RNN encoder.
             outputs, states = tf.nn.bidirectional_dynamic_rnn(
                 cell, cell, RNN_in, dtype=tf.float32)
@@ -121,32 +120,31 @@ with train_graph.as_default():
             # RNN decoder.
             decoder_cell = cc.StiefelGatedRecurrentUnit(
                 num_units=int(cell_size), stiefel=stiefel, num_proj=m,
-                complex_input=True)
-            y, final_state = tf.nn.dynamic_rnn(decoder_cell, to_decode,
-                                               dtype=tf.float32)
-            y_sel = y
-            y_gt_sel = y_gt
+                complex_input=True, reuse=reuse)
+            y, _ = tf.nn.dynamic_rnn(decoder_cell, to_decode,
+                                     dtype=tf.float32)
+            return y
+
+        y = define_bidirecitonal(RNN_in, cell_size, stiefel, dropout)
+        if dropout:
+            print('test part of graph.')
+            y_test = define_bidirecitonal(RNN_in, cell_size, stiefel,
+                                          dropout=False, reuse=True)
         else:
-            cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size,
-                                                stiefel=stiefel,
-                                                num_proj=m,
-                                                complex_input=True)
-            y, final_state = \
-                tf.nn.dynamic_rnn(cell, xf, dtype=tf.float32)
-            y_sel = y[:, -1, :]
-            y_gt_sel = y_gt[:, -1, :]
+            y_test = y
     else:
         if c != 1:
             raise ValueError("c must be one for non RNN networks.")
         y = tf.nn.sigmoid(cc.C_to_R(flat, m, reuse=None))
-        y_sel = y[:, -1, :]
-        y_gt_sel = y_gt[:, -1, :]
+        y = y[:, -1, :]
+        y_gt = y_gt[:, -1, :]
 
     # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
     # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
-    L = tf.losses.mean_squared_error(y_gt_sel, y_sel)
+    L = tf.losses.mean_squared_error(y_gt, y)
+    L_test = tf.losses.mean_squared_error(y_gt, y_test)
     gvs = optimizer.compute_gradients(L)
-    tf.summary.scalar('mean_squared_error', L)
+    tf.summary.scalar('train_mse', L)
     # print(gvs)
     with tf.variable_scope("gradient_clipping"):
         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
@@ -158,7 +156,7 @@ with train_graph.as_default():
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
     saver = tf.train.Saver()
-    test_summary = tf.summary.scalar('test_mse', L)
+    test_summary = tf.summary.scalar('test_mse', L_test)
     parameter_total = compute_parameter_total(tf.trainable_variables())
 
 # Load the data.
@@ -167,9 +165,9 @@ musicNet = MusicNet(c, window_size, window_size, sampling_rate=sampling_rate)
 batched_time_music_lst, batcheded_time_labels_lst = musicNet.get_test_batches(batch_size)
 
 print('parameters:', m, sampling_rate, features_idx, labels_idx, c, batch_size,
-      filter_width, filter_width_2, d, window_size, stride, stride2,
+      filter_width, d, window_size, stride,
       learning_rate, learning_rate_decay, iterations, GPU, CNN,
-      bidirectional, parameter_total)
+      dropout, parameter_total)
 
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
@@ -177,11 +175,11 @@ param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
             + '_bs_' + str(batch_size) + '_ws_' + str(window_size) \
             + '_fs_' + str(sampling_rate)
 if CNN:
-    param_str += '_fw1_' + str(filter_width) + '_fw2_' + str(filter_width_2) \
-        + '_str1_' + str(stride) + '_str2_' + str(stride2) + '_depth_' + str(d)
-param_str += '_layers_' + str(1) + '_loss_' + str(L.name[:-8]) \
-             + '_cnn_' + str(CNN) + '_bidirectional_' + str(bidirectional) \
-             + '_cs_' + str(cell_size) \
+    param_str += '_fw1_' + str(filter_width)  \
+        + '_str_' + str(stride) + '_depth_' + str(d)
+param_str += '_loss_' + str(L.name[:-8]) \
+             + '_cnn_' + str(CNN) + '_dropout_' + str(dropout) \
+             + '_cs_' + str(cell_size) + '_c_' + str(c) \
              + '_totparam_' + str(parameter_total)
 savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
@@ -206,7 +204,7 @@ with tf.Session(graph=train_graph, config=config) as sess:
                                    batch_size)
             feed_dict = {x: batch_time_music_test,
                          y_gt: batched_time_labels_test}
-            L_np, test_summary_eval, global_step_eval = sess.run([L, test_summary,
+            L_np, test_summary_eval, global_step_eval = sess.run([L_test, test_summary,
                                                                  global_step],
                                                                  feed_dict=feed_dict)
             square_error.append(L_np)
@@ -223,15 +221,11 @@ with tf.Session(graph=train_graph, config=config) as sess:
                 feed_dict = {x: batch_time_music,
                              y_gt: batched_time_labels}
                 loss, Yhattest, np_global_step =  \
-                    sess.run([L, y, global_step], feed_dict=feed_dict)
+                    sess.run([L_test, y_test, global_step], feed_dict=feed_dict)
                 losses_lst.append(loss)
-                if bidirectional:
-                    center = int(c/2.0)
-                    yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
-                    yflat = np.append(yflat, batched_time_labels[:, center, :].flatten())
-                else:
-                    yhatflat = np.append(yhatflat, Yhattest[:, -1, :].flatten())
-                    yflat = np.append(yflat, batched_time_labels[:, -1, :].flatten())
+                center = int(c/2.0)
+                yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
+                yflat = np.append(yflat, batched_time_labels[:, center, :].flatten())
             average_precision.append(average_precision_score(yflat,
                                                              yhatflat))
             end = time.time()
@@ -251,5 +245,5 @@ with tf.Session(graph=train_graph, config=config) as sess:
         summary_writer.add_summary(summaries, global_step=np_global_step)
 
     # save the network
-    saver.save(sess, savedir + '/weights', global_step=np_global_step)
-    pickle.dump(average_precision, open(savedir + "avgprec.pkl", "wb"))
+    saver.save(sess, savedir + '/weights/', global_step=np_global_step)
+    pickle.dump(average_precision, open(savedir + "/avgprec.pkl", "wb"))

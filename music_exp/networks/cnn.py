@@ -1,4 +1,3 @@
-print(' Test print.')
 import sys
 import time
 import pickle
@@ -7,10 +6,10 @@ import tensorflow as tf
 from sklearn.metrics import average_precision_score
 
 from custom_conv import complex_conv1D
+from custom_conv import complex_max_pool1d
 from music_net_handler import MusicNet
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
-print('Does this get printed')
 sys.path.insert(0, "../")
 import custom_cells as cc
 
@@ -25,25 +24,27 @@ labels_idx = 1      # second element of (X,Y) data tuple
 # Network parameters:
 c = 1            # number of context vectors
 batch_size = 10      # The number of data points to be processed in parallel.
-d = 256              # CNN filter depth.
-filter_width = 256   # CNN filter length
+d = 48              # CNN filter depth.
+filter_width = 512   # CNN filter length
 stride = 16
-filter_width_2 = 64
-stride2 = 8
+filter_width_2 = None
+stride2 = None
+
+dense_size = 4096
 
 # FFT parameters:
 # window_size = 16384
-window_size = 8192
+window_size = 4096
 # window_size = 2048
 
 
 # Training parameters:
-learning_rate = 0.001
+learning_rate = 0.0001
 learning_rate_decay = 0.9
-decay_iterations = 10000
+decay_iterations = 15000
 iterations = 250000
 # iterations = 10000
-GPU = [6]
+GPU = [3]
 
 
 def compute_parameter_total(trainable_variables):
@@ -74,13 +75,14 @@ with train_graph.as_default():
 
     # compute the fft in the time domain data.
     # x = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
+    # xf = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
     xf = tf.spectral.rfft(x)
     xf = tf.expand_dims(xf, -1)
 
     dec_learning_rate = tf.train.exponential_decay(learning_rate, global_step,
                                                    decay_iterations, learning_rate_decay,
                                                    staircase=True)
-    optimizer = tf.train.RMSPropOptimizer(dec_learning_rate)
+    optimizer = tf.train.AdamOptimizer(dec_learning_rate)
     tf.summary.scalar('learning_rate', dec_learning_rate)
 
     with tf.variable_scope('complex_CNN'):
@@ -90,18 +92,22 @@ with train_graph.as_default():
         conv1 = cc.split_relu(conv1)
         # conv1 = tf.nn.relu(conv1)
         debug_here()
-        conv2 = complex_conv1D(conv1, filter_width=filter_width_2, depth=d,
-                               stride=stride2, padding='VALID', scope='_layer2')
+        # conv2 = complex_conv1D(conv1, filter_width=filter_width_2, depth=d,
+        #                        stride=stride2, padding='VALID', scope='_layer2')
         # conv2 = cc.hirose(conv2, 'mod_relu_2')
         # conv2 = tf.nn.relu(conv2)
-        conv2 = cc.split_relu(conv2)
+        # conv2 = cc.split_relu(conv2)
+        conv2 = complex_max_pool1d(conv1, [1, 1, 4, 1], [1, 1, 2, 1],
+                                   padding='VALID', scope='_layer1')
         debug_here()
         print('conv2-shape:', conv2)
         flat = tf.reshape(conv2, [batch_size, -1])
-        y = tf.nn.sigmoid(cc.C_to_R(flat, m, reuse=None))
-        # y = tf.nn.sigmoid(cc.matmul_plus_bias(flat, m, reuse=None, scope='fc'))
+        full = cc.split_relu(cc.complex_matmul(flat, dense_size, 'complex_dense',
+                                               reuse=None, bias=True))
+        y = tf.nn.sigmoid(cc.C_to_R(full, m, reuse=None))
+        # y = tf.nn.sigmoid(cc.matmul_plus_bias(tf.real(full), m, reuse=None, scope='fc'))
         L = tf.losses.mean_squared_error(y, y_gt)
-    tf.summary.scalar('mean_squared_error', L)
+    tf.summary.scalar('train_mse', L)
     gvs = optimizer.compute_gradients(L)
     with tf.variable_scope("gradient_clipping"):
         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
@@ -131,7 +137,7 @@ param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
             + '_depth_' + str(d)\
             + '_fw1_' + str(filter_width) + '_fw2_' + str(filter_width_2) \
             + '_str1_' + str(stride) + '_str2_' + str(stride2) \
-            + '_layers_' + str(1) + '_loss_' + str(L.name[:-8]) \
+            + '_ds_' + str(dense_size) + '_loss_' + str(L.name[:-8]) \
             + '_totparam_' + str(parameter_total)
 savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
@@ -175,7 +181,7 @@ with tf.Session(graph=train_graph, config=config) as sess:
                 loss, Yhattest, np_global_step =  \
                     sess.run([L, y, global_step], feed_dict=feed_dict)
                 yhatflat = np.append(yhatflat, Yhattest.flatten())
-                yflat = np.append(yflat, batched_time_labels[:, -1, :].flatten())
+                yflat = np.append(yflat, np.squeeze(batched_time_labels, 1).flatten())
                 losses_lst.append(loss)
             average_precision.append(average_precision_score(yflat,
                                                              yhatflat))
