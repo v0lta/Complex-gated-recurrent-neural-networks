@@ -43,9 +43,9 @@ class Seq2SeqModel(object):
                custom_opt=False,
                cgru=True,
                fft=True,
-               window_size=10):
+               window_size=30,
+               step_size=10):
     """Create the model.
-
     Args:
       architecture: [basic, tied] whether to tie the decoder and decoder.
       source_seq_len: lenght of the input sequence.
@@ -143,14 +143,14 @@ class Seq2SeqModel(object):
     # Store the outputs here
     outputs  = []
 
-
     if fft:
       assert cgru == True
       # transform input and output.
       fft_enc_in = []
-      for i in range(0, source_seq_len // window_size):
-        start = i * window_size
-        end = (i+1) * window_size
+      for i in range(0, (source_seq_len - window_size) // step_size + 1):
+        start = i * step_size
+        end = start +  window_size
+        print('window', i, start, end, source_seq_len)
         current_window = tf.stack(enc_in[start:end], axis=-1)
         current_fft = tf.spectral.rfft(current_window)
         batch_size = tf.shape(current_fft)[0]
@@ -159,9 +159,10 @@ class Seq2SeqModel(object):
         fft_enc_in.append(flat_fft)
 
       fft_dec_in = []
-      for i in range(0, target_seq_len // window_size):
-        start = i * window_size
-        end = (i+1) * window_size
+      for i in range(0, (target_seq_len - window_size) // step_size + 1):
+        start = i * step_size
+        end = start +  window_size
+        print('window', i, start, end, target_seq_len)
         current_window = tf.stack(dec_in[start:end], axis=-1)
         current_fft = tf.spectral.rfft(current_window)
         batch_size = tf.shape(current_fft)[0]
@@ -171,7 +172,6 @@ class Seq2SeqModel(object):
 
       enc_in = fft_enc_in
       dec_in = fft_dec_in
-
     # Define the loss function
     lf = None
     if loss_to_use == "sampling_based":
@@ -193,7 +193,6 @@ class Seq2SeqModel(object):
     else:
       raise(ValueError, "Unknown architecture: %s" % architecture )
 
-
     if fft:
       # compute the inverse fft on the outputs and restore the shape.
       # output shape should be [10, ?, 54]
@@ -205,12 +204,36 @@ class Seq2SeqModel(object):
         complex_result = tf.reshape(complex_result, [batch_size, self.input_size, 
                                                      (window_size//2+1)])
         real_result = tf.spectral.irfft(complex_result)
-        ifft_out.extend(tf.split(real_result, window_size, axis=-1))
-      squeeze_ifft_out = []
-      for ifft_out_el in ifft_out:
-        squeeze_ifft_out.append(tf.squeeze(ifft_out_el, axis=-1))
-      outputs = squeeze_ifft_out
+        # transpose into batch-major tensor.
+        ifft_out.append(tf.transpose(real_result, [0, 2, 1]))
+      # pad outputs to same length according to window positions.
+      padded_ifft_out = []
+      for window_no, ifft_tensor in enumerate(ifft_out):
+        leading_zeros = window_no*step_size
+        trailing_zeros = target_seq_len//2 - leading_zeros
+        padded_ifft_out.append(tf.pad(ifft_tensor, 
+          [[0, 0], [leading_zeros, trailing_zeros], [0, 0]]))
 
+      # set up window function.
+      output_sum = tf.reduce_sum(tf.stack(padded_ifft_out, axis=0), axis=0)
+      repetitions = window_size // step_size
+
+      #rectangular scaling.
+      rec_scale_mul = []
+      for i in range(0, output_sum.shape.as_list()[1]):
+        if i < window_size:
+          repetitions = np.max([np.ceil((i+1) / step_size), 1.0])
+        elif i >= target_seq_len-window_size:
+          repetitions = np.ceil((target_seq_len - i) / step_size)
+        else:
+          repetitions = window_size // step_size
+        rec_scale_mul.append(1.0/repetitions)
+      rec_scale_mul = tf.constant(rec_scale_mul)
+      rec_scale_mul = tf.reshape(rec_scale_mul, [1, output_sum.shape.as_list()[1], 1])
+      outputs = output_sum*rec_scale_mul
+      outputs = tf.unstack(outputs, axis=1)
+
+    debug_here()
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):
