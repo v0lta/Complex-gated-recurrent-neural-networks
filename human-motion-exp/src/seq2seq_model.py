@@ -210,7 +210,9 @@ class Seq2SeqModel(object):
       padded_ifft_out = []
       for window_no, ifft_tensor in enumerate(ifft_out):
         leading_zeros = window_no*step_size
-        trailing_zeros = target_seq_len//2 - leading_zeros
+        trailing_zeros = (target_seq_len-window_size) - leading_zeros
+        print('leading_zeros', leading_zeros)
+        print('trailing_zeros', trailing_zeros)
         padded_ifft_out.append(tf.pad(ifft_tensor, 
           [[0, 0], [leading_zeros, trailing_zeros], [0, 0]]))
 
@@ -228,12 +230,12 @@ class Seq2SeqModel(object):
         else:
           repetitions = window_size // step_size
         rec_scale_mul.append(1.0/repetitions)
+      print('scaling', rec_scale_mul)
       rec_scale_mul = tf.constant(rec_scale_mul)
       rec_scale_mul = tf.reshape(rec_scale_mul, [1, output_sum.shape.as_list()[1], 1])
       outputs = output_sum*rec_scale_mul
       outputs = tf.unstack(outputs, axis=1)
 
-    debug_here()
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):

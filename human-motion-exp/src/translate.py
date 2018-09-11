@@ -164,7 +164,7 @@ def train():
         'stiefel', str(FLAGS.stiefel) + '\n',
         'cgru', str(FLAGS.cgru) + '\n',
         'fft', str(FLAGS.fft) + '\n',
-        'window_size', str(FLAGS.window_size),
+        'window_size', str(FLAGS.window_size) + '\n',
         'step_size', str(FLAGS.step_size))
 
   actions = define_actions( FLAGS.action )
