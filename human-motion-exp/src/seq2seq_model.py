@@ -44,7 +44,8 @@ class Seq2SeqModel(object):
                cgru=True,
                fft=True,
                window_size=30,
-               step_size=10):
+               step_size=10,
+               gaussian_scaling=False):
     """Create the model.
     Args:
       architecture: [basic, tied] whether to tie the decoder and decoder.
@@ -150,7 +151,7 @@ class Seq2SeqModel(object):
       for i in range(0, (source_seq_len - window_size) // step_size + 1):
         start = i * step_size
         end = start +  window_size
-        print('window', i, start, end, source_seq_len)
+        print('inp window', i, start, end, source_seq_len)
         current_window = tf.stack(enc_in[start:end], axis=-1)
         current_fft = tf.spectral.rfft(current_window)
         batch_size = tf.shape(current_fft)[0]
@@ -162,7 +163,7 @@ class Seq2SeqModel(object):
       for i in range(0, (target_seq_len - window_size) // step_size + 1):
         start = i * step_size
         end = start +  window_size
-        print('window', i, start, end, target_seq_len)
+        print('out window', i, start, end, target_seq_len)
         current_window = tf.stack(dec_in[start:end], axis=-1)
         current_fft = tf.spectral.rfft(current_window)
         batch_size = tf.shape(current_fft)[0]
@@ -206,6 +207,7 @@ class Seq2SeqModel(object):
         real_result = tf.spectral.irfft(complex_result)
         # transpose into batch-major tensor.
         ifft_out.append(tf.transpose(real_result, [0, 2, 1]))
+
       # pad outputs to same length according to window positions.
       padded_ifft_out = []
       for window_no, ifft_tensor in enumerate(ifft_out):
@@ -235,6 +237,7 @@ class Seq2SeqModel(object):
       rec_scale_mul = tf.reshape(rec_scale_mul, [1, output_sum.shape.as_list()[1], 1])
       outputs = output_sum*rec_scale_mul
       outputs = tf.unstack(outputs, axis=1)
+
 
     self.outputs = outputs
 

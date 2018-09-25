@@ -72,7 +72,7 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'custom_opt' if FLAGS.stiefel else 'RMSProp',
   'cgru' if FLAGS.cgru else 'gru',
   'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time',
-  'fft_step_{0}'.format(FLAGS.step_size)))
+  'fft_step_{0}'.format(FLAGS.step_size) if FLAGS.fft else ''))
 
 summaries_dir = os.path.normpath(os.path.join( train_dir, "log_complex" )) # Directory for TB summaries
 
@@ -660,16 +660,16 @@ def sample():
         eulerchannels_pred = srnn_pred_expmap[i]
 
         for j in np.arange( eulerchannels_pred.shape[0] ):
-          for k in np.arange(3,97,3):
+          for k in np.arange(3, 97, 3):
             eulerchannels_pred[j,k:k+3] = data_utils.rotmat2euler(
               data_utils.expmap2rotmat( eulerchannels_pred[j,k:k+3] ))
 
-        eulerchannels_pred[:,0:6] = 0
+        eulerchannels_pred[:, 0:6] = 0
 
         # Pick only the dimensions with sufficient standard deviation. Others are ignored.
         idx_to_use = np.where( np.std( eulerchannels_pred, 0 ) > 1e-4 )[0]
 
-        euc_error = np.power( srnn_gts_euler[action][i][:,idx_to_use] - eulerchannels_pred[:,idx_to_use], 2)
+        euc_error = np.power( srnn_gts_euler[action][i][:, idx_to_use] - eulerchannels_pred[:, idx_to_use], 2)
         euc_error = np.sum(euc_error, 1)
         euc_error = np.sqrt( euc_error )
         mean_errors[i,:] = euc_error
