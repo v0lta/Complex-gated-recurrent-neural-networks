@@ -126,6 +126,18 @@ class LinearSpaceDecoderWrapper(RNNCell):
     return output, new_state
 
 
+def mod_sigmoid(z, scope='', reuse=None):
+    """
+    ModSigmoid implementation, using a coupled alpha and beta.
+    """
+    with tf.variable_scope('mod_sigmoid_' + scope, reuse=reuse):
+        alpha = tf.get_variable('alpha', [], dtype=tf.float32,
+                                initializer=tf.constant_initializer(0.0))
+        alpha_norm = tf.nn.sigmoid(alpha)
+        pre_act = alpha_norm * tf.real(z) + (1 - alpha_norm)*tf.imag(z)
+        return tf.complex(tf.nn.sigmoid(pre_act), tf.zeros_like(pre_act))
+
+
 def mod_sigmoid_beta(z, scope='', reuse=None):
     """
     ModSigmoid implementation, with uncoupled alpha and beta.
@@ -317,7 +329,7 @@ class ComplexGatedRecurrentUnit(RNNCell):
     Can we implement a complex GRU?
     '''
     def __init__(self, num_units, activation=mod_relu,
-                 num_proj=None, reuse=None, single_gate=True,
+                 num_proj=None, reuse=None, single_gate=False,
                  complex_out=False):
         super().__init__(_reuse=reuse)
         self._num_units = num_units
@@ -331,7 +343,7 @@ class ComplexGatedRecurrentUnit(RNNCell):
         self._stateU = True
         self._gateO = False
         self._single_gate = single_gate
-        self._gate_activation = mod_sigmoid_beta
+        self._gate_activation = mod_sigmoid
         self._single_gate_avg = False
         self._complex_inout = complex_out
 

@@ -15,6 +15,7 @@ import numpy as np
 import os
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+import tensorflow.contrib.signal as tfsignal
 import rnn_cell_extensions # my extensions of the tf repos
 import data_utils
 from IPython.core.debugger import Tracer
@@ -92,26 +93,8 @@ class Seq2SeqModel(object):
     self.learning_rate_decay_op = self.learning_rate.assign( self.learning_rate * learning_rate_decay_factor )
     self.global_step = tf.Variable(0, trainable=False)
 
-    ### 
-    # === Create the RNN that will keep the state ===
-    print('rnn_size = {0}'.format( rnn_size ))
-    if cgru:
-      if not fft:
-        cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size )
-      else:
-        num_proj = self.input_size * (window_size//2+1)
-        cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size, complex_out=fft,
-                                                              num_proj=num_proj)
-    else:
-        cell = tf.contrib.rnn.GRUCell( self.rnn_size )
-    
-
-    if num_layers > 1:
-      cell = tf.contrib.rnn.MultiRNNCell( [tf.contrib.rnn.GRUCell(self.rnn_size) for _ in range(num_layers)] )
-
     # === Transform the inputs ===
     with tf.name_scope("inputs"):
-
       enc_in = tf.placeholder(dtype, shape=[None, source_seq_len-1, self.input_size], name="enc_in")
       dec_in = tf.placeholder(dtype, shape=[None, target_seq_len, self.input_size], name="dec_in")
       dec_out = tf.placeholder(dtype, shape=[None, target_seq_len, self.input_size], name="dec_out")
@@ -132,47 +115,81 @@ class Seq2SeqModel(object):
       dec_in = tf.split(dec_in, target_seq_len, axis=0)
       dec_out = tf.split(dec_out, target_seq_len, axis=0)
 
+    if fft:
+      assert cgru == True
+      # if true do centering to avoid boundary problems.
+      center = True
+      if center:
+        pad_enc_in = tf.stack(enc_in, axis=-1)
+        pad_amount = 2 * (window_size - step_size)
+        print('padding with', [pad_amount // 2, pad_amount // 2])
+        pad_enc_in = tf.pad(pad_enc_in,
+                       [[0, 0], [0, 0], [pad_amount // 2, pad_amount // 2]], 'REFLECT')
+      else:
+        pad_enc_in = tf.stack(enc_in, axis=-1)
+
+      # transform input and output.
+      fft_enc_in = tfsignal.stft(pad_enc_in, window_size, step_size)
+      print('fft_enc_in.shape', fft_enc_in.shape)
+      batch_size = tf.shape(fft_enc_in)[0]
+      freq_tensor_shape = fft_enc_in.get_shape().as_list()
+      frames_in = freq_tensor_shape[2]
+      fft_dim_in = freq_tensor_shape[1]*freq_tensor_shape[-1]
+      fft_enc_in = tf.transpose(fft_enc_in, [0, 2, 1, 3])
+      fft_enc_in = tf.reshape(fft_enc_in, [batch_size, frames_in, fft_dim_in],
+                              name='fft_enc_in_reshape')
+      fft_enc_in = tf.unstack(fft_enc_in, axis=1)
+      if center is True:
+        pad_dec_in = tf.stack(dec_in, axis=-1)
+        pad_dec_in = tf.pad(pad_dec_in,
+                       [[0, 0], [0, 0], [pad_amount // 2, pad_amount // 2]], 'REFLECT')
+      else:
+        pad_dec_in = tf.stack(dec_in, axis=-1)
+      fft_dec_in = tfsignal.stft(pad_dec_in, window_size, step_size)
+      print('fft_dec_in.shape', fft_dec_in.shape)
+      batch_size = tf.shape(fft_dec_in)[0]
+      freq_tensor_shape = fft_dec_in.get_shape().as_list()
+      frames_dec = freq_tensor_shape[2]
+      fft_unique_bins_dec = freq_tensor_shape[3]
+      assert self.input_size == freq_tensor_shape[1]
+      fft_dim_out = self.input_size*fft_unique_bins_dec
+      fft_dec_in = tf.transpose(fft_dec_in, [0, 2, 1, 3])
+      fft_dec_in = tf.reshape(fft_dec_in, [batch_size, frames_dec, fft_dim_out],
+                              name='fft_dec_in_reshape')
+      fft_dec_in = tf.unstack(fft_dec_in, axis=1)
+      enc_in = fft_enc_in
+      dec_in = fft_dec_in
+      assert fft_dim_in == fft_dim_out
+
+    # === Create the RNN that will keep the state ===
+    print('rnn_size = {0}'.format( rnn_size ))
+    if cgru:
+      if not fft:
+        cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size )
+      else:
+        # num_proj = self.input_size * (window_size//2+1)
+        cell = rnn_cell_extensions.ComplexGatedRecurrentUnit( self.rnn_size, complex_out=fft,
+                                                              num_proj=fft_dim_in)
+        print(cell.to_string())
+    else:
+        cell = tf.contrib.rnn.GRUCell( self.rnn_size )
+    
+    if num_layers > 1:
+      cell = tf.contrib.rnn.MultiRNNCell( [tf.contrib.rnn.GRUCell(self.rnn_size) for _ in range(num_layers)] )
+
     # === Add space decoder ===
     if not fft:
       cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
 
     # Finally, wrap everything in a residual layer if we want to model velocities
     if residual_velocities:
+        assert fft is False
         print('using resudial_velocities')
         cell = rnn_cell_extensions.ResidualWrapper( cell )
 
     # Store the outputs here
     outputs  = []
 
-    if fft:
-      assert cgru == True
-      # transform input and output.
-      fft_enc_in = []
-      for i in range(0, (source_seq_len - window_size) // step_size + 1):
-        start = i * step_size
-        end = start +  window_size
-        print('inp window', i, start, end, source_seq_len)
-        current_window = tf.stack(enc_in[start:end], axis=-1)
-        current_fft = tf.spectral.rfft(current_window)
-        batch_size = tf.shape(current_fft)[0]
-        fft_els = np.prod(current_fft.get_shape().as_list()[1:])
-        flat_fft = tf.reshape(current_fft, [batch_size, fft_els])
-        fft_enc_in.append(flat_fft)
-
-      fft_dec_in = []
-      for i in range(0, (target_seq_len - window_size) // step_size + 1):
-        start = i * step_size
-        end = start +  window_size
-        print('out window', i, start, end, target_seq_len)
-        current_window = tf.stack(dec_in[start:end], axis=-1)
-        current_fft = tf.spectral.rfft(current_window)
-        batch_size = tf.shape(current_fft)[0]
-        fft_els = np.prod(current_fft.get_shape().as_list()[1:])
-        flat_fft = tf.reshape(current_fft, [batch_size, fft_els])
-        fft_dec_in.append(flat_fft)
-
-      enc_in = fft_enc_in
-      dec_in = fft_dec_in
     # Define the loss function
     lf = None
     if loss_to_use == "sampling_based":
@@ -196,49 +213,19 @@ class Seq2SeqModel(object):
 
     if fft:
       # compute the inverse fft on the outputs and restore the shape.
-      # output shape should be [10, ?, 54]
-      ifft_out = []
-      for output in outputs:
-        # complex_result = tf.complex(output[:, :fft_els], 
-        #                             output[:, fft_els:])
-        complex_result = output
-        complex_result = tf.reshape(complex_result, [batch_size, self.input_size, 
-                                                     (window_size//2+1)])
-        real_result = tf.spectral.irfft(complex_result)
-        # transpose into batch-major tensor.
-        ifft_out.append(tf.transpose(real_result, [0, 2, 1]))
-
-      # pad outputs to same length according to window positions.
-      padded_ifft_out = []
-      for window_no, ifft_tensor in enumerate(ifft_out):
-        leading_zeros = window_no*step_size
-        trailing_zeros = (target_seq_len-window_size) - leading_zeros
-        print('leading_zeros', leading_zeros)
-        print('trailing_zeros', trailing_zeros)
-        padded_ifft_out.append(tf.pad(ifft_tensor, 
-          [[0, 0], [leading_zeros, trailing_zeros], [0, 0]]))
-
-      # set up window function.
-      output_sum = tf.reduce_sum(tf.stack(padded_ifft_out, axis=0), axis=0)
-      repetitions = window_size // step_size
-
-      #rectangular scaling.
-      rec_scale_mul = []
-      for i in range(0, output_sum.shape.as_list()[1]):
-        if i < window_size:
-          repetitions = np.max([np.ceil((i+1) / step_size), 1.0])
-        elif i >= target_seq_len-window_size:
-          repetitions = np.ceil((target_seq_len - i) / step_size)
-        else:
-          repetitions = window_size // step_size
-        rec_scale_mul.append(1.0/repetitions)
-      print('scaling', rec_scale_mul)
-      rec_scale_mul = tf.constant(rec_scale_mul)
-      rec_scale_mul = tf.reshape(rec_scale_mul, [1, output_sum.shape.as_list()[1], 1])
-      outputs = output_sum*rec_scale_mul
-      outputs = tf.unstack(outputs, axis=1)
-
-
+      spec_out = tf.reshape(tf.stack(outputs, -1),
+                            [batch_size, self.input_size, fft_unique_bins_dec, len(outputs)])
+      spec_out = tf.transpose(spec_out, [0, 1, 3, 2])
+      outputs = tfsignal.inverse_stft(spec_out, window_size, step_size,
+                                      window_fn=tf.contrib.signal.inverse_stft_window_fn(step_size))
+      # debug_here()
+      if center and pad_amount > 0:
+          outputs = outputs[:, :, pad_amount // 2:-pad_amount // 2]
+      else:
+          outputs = tf.transpose(outputs)
+      outputs.set_shape([None, self.input_size, target_seq_len])
+      outputs = tf.unstack(outputs, axis=-1, name='result_unstack')
+      
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):
@@ -559,7 +546,7 @@ class Seq2SeqModel(object):
     decoder_inputs  = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
     decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
 
-    for i in xrange( self.batch_size ):
+    for i in range( self.batch_size ):
 
       the_key = all_keys[ chosen_keys[i] ]
 
