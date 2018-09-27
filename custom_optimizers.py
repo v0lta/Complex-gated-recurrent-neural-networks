@@ -26,7 +26,7 @@ class RMSpropNatGrad(tf.train.Optimizer):
         if global_step is not None:
             self._global_step_tensor = global_step
         else:
-            raise ValueError("global_step must be tensor missing.")
+            raise ValueError("global_step tensor must be missing.")
 
         use_locking = False
         super().__init__(use_locking, name)

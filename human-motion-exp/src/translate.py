@@ -53,7 +53,9 @@ tf.app.flags.DEFINE_boolean("cgru", False, "Specify if the complex GRU should be
 tf.app.flags.DEFINE_boolean("stiefel", False, "Use unitarity preserving weight updates.")
 tf.app.flags.DEFINE_boolean("fft", False, "Do frequency domain motion analysis.")
 tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
-tf.app.flags.DEFINE_integer("window_size", 10, "Set the fft window size.")
+tf.app.flags.DEFINE_integer("window_size", 30, "Set the fft window size.")
+tf.app.flags.DEFINE_integer("step_size", 5, "Set the fft window step size.")
+
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -69,7 +71,8 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'residual_vel' if FLAGS.residual_velocities else 'not_residual_vel',
   'custom_opt' if FLAGS.stiefel else 'RMSProp',
   'cgru' if FLAGS.cgru else 'gru',
-  'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time'))
+  'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time',
+  'fft_step_{0}'.format(FLAGS.step_size) if FLAGS.fft else ''))
 
 summaries_dir = os.path.normpath(os.path.join( train_dir, "log_complex" )) # Directory for TB summaries
 
@@ -111,6 +114,7 @@ def create_model(session, actions, sampling=False):
       cgru=FLAGS.cgru,
       fft=FLAGS.fft,
       window_size=FLAGS.window_size,
+      step_size=FLAGS.step_size,
       dtype=tf.float32)
 
   if FLAGS.load <= 0:
@@ -160,7 +164,8 @@ def train():
         'stiefel', str(FLAGS.stiefel) + '\n',
         'cgru', str(FLAGS.cgru) + '\n',
         'fft', str(FLAGS.fft) + '\n',
-        'window_size', str(FLAGS.window_size))
+        'window_size', str(FLAGS.window_size) + '\n',
+        'step_size', str(FLAGS.step_size))
 
   actions = define_actions( FLAGS.action )
 
@@ -655,16 +660,16 @@ def sample():
         eulerchannels_pred = srnn_pred_expmap[i]
 
         for j in np.arange( eulerchannels_pred.shape[0] ):
-          for k in np.arange(3,97,3):
+          for k in np.arange(3, 97, 3):
             eulerchannels_pred[j,k:k+3] = data_utils.rotmat2euler(
               data_utils.expmap2rotmat( eulerchannels_pred[j,k:k+3] ))
 
-        eulerchannels_pred[:,0:6] = 0
+        eulerchannels_pred[:, 0:6] = 0
 
         # Pick only the dimensions with sufficient standard deviation. Others are ignored.
         idx_to_use = np.where( np.std( eulerchannels_pred, 0 ) > 1e-4 )[0]
 
-        euc_error = np.power( srnn_gts_euler[action][i][:,idx_to_use] - eulerchannels_pred[:,idx_to_use], 2)
+        euc_error = np.power( srnn_gts_euler[action][i][:, idx_to_use] - eulerchannels_pred[:, idx_to_use], 2)
         euc_error = np.sum(euc_error, 1)
         euc_error = np.sqrt( euc_error )
         mean_errors[i,:] = euc_error
