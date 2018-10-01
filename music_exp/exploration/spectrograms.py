@@ -1,6 +1,8 @@
 import numpy as np                                       # fast vectors and matrices
 import matplotlib.pyplot as plt                          # plotting
 from scipy import fft                                    # fast fourier transform
+import tensorflow as tf
+# tf.enable_eager_execution()
 from IPython.display import Audio
 from intervaltree import Interval, IntervalTree
 
@@ -41,9 +43,47 @@ second = 3
 # fig.axes[0].set_ylabel('amplitude')
 # plt.show()
 
-fig = plt.figure(figsize=(20, 7))
-plt.imshow(Xs.T[0:150], aspect='auto')
+if 0:
+    fig = plt.figure(figsize=(20, 7))
+    plt.imshow(Xs.T[0:150], aspect='auto')
+    plt.gca().invert_yaxis()
+    fig.axes[0].set_xlabel('windows (~86Hz)')
+    fig.axes[0].set_ylabel('frequency')
+    plt.show()
+
+center = False
+if center:
+    pad_amount = 2 * (window_size - stride)
+    x_pad = tf.pad(X.astype(np.float32).transpose(),
+                   [[pad_amount // 2, pad_amount // 2]], 'REFLECT')
+else:
+    x_pad = X.astype(np.float32).transpose()
+
+stfts = tf.contrib.signal.stft(x_pad, window_size, stride)
+
+if 0:
+    output_T = tf.contrib.signal.inverse_stft(
+        stfts, window_size, stride,
+        window_fn=tf.contrib.signal.inverse_stft_window_fn(stride))
+    if center and pad_amount > 0:
+        output = tf.transpose(output_T[pad_amount // 2:-pad_amount // 2])
+    else:
+        output = tf.transpose(output_T)
+
+wps = fs/float(stride)                # ~86 windows/second
+Yvec = np.zeros((int(10*wps), 128))   # 128 distinct note labels
+colors = {41: .33, 42: .66, 43: 1}
+
+for window in range(Yvec.shape[0]):
+    labels = Y[window*stride]
+    for label in labels:
+        Yvec[window, label.data[1]] = colors[label.data[0]]
+
+
+f, axarr = plt.subplots(1, 3)
+axarr[0].imshow(Xs.T[0:150][::-1, :], aspect='auto')
+axarr[1].imshow(np.abs(np.array(stfts[:Xs.shape[0], :]).transpose()[::-1, :][-150:, :]),
+                aspect='auto')
+axarr[2].imshow(Yvec.T, aspect='auto', cmap='ocean_r')
 plt.gca().invert_yaxis()
-fig.axes[0].set_xlabel('windows (~86Hz)')
-fig.axes[0].set_ylabel('frequency')
 plt.show()

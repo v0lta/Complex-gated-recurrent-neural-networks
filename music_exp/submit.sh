@@ -1,3 +1,3 @@
-#block(name=cgRNN_CNN_4_8_16_d, threads=2, memory=7500, subtasks=1, hours=80, gpus=1)
+#block(name=mn_CNN_trab, threads=2, memory=7500, subtasks=1, hours=96, gpus=1)
     echo "process subtask $SUBTASK_ID of $N_SUBTASKS"
-    ipython ./networks/cgRNN.py
+    ipython ./networks/cnn.py

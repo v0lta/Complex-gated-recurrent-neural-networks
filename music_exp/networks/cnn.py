@@ -3,8 +3,9 @@ import time
 import pickle
 import numpy as np
 import tensorflow as tf
+import tensorflow.contrib.signal as tfsignal
+from tensorflow.core.framework import summary_pb2
 from sklearn.metrics import average_precision_score
-
 from custom_conv import complex_conv1D
 from custom_conv import complex_max_pool1d
 from music_net_handler import MusicNet
@@ -14,7 +15,7 @@ sys.path.insert(0, "../")
 import custom_cells as cc
 
 print('CNN experiment started.')
-subfolder = 'CNN'
+subfolder = 'CNN_fix'
 
 m = 128         # number of notes
 fs = 11000      # samples/second
@@ -27,14 +28,13 @@ batch_size = 10      # The number of data points to be processed in parallel.
 d = 48              # CNN filter depth.
 filter_width = 512   # CNN filter length
 stride = 16
-filter_width_2 = None
-stride2 = None
 
-dense_size = 4096
+dense_size = 2048
 
 # FFT parameters:
 # window_size = 16384
 window_size = 4096
+fft_stride = 256
 # window_size = 2048
 
 
@@ -42,9 +42,9 @@ window_size = 4096
 learning_rate = 0.0001
 learning_rate_decay = 0.9
 decay_iterations = 15000
-iterations = 250000
+iterations = 350000
 # iterations = 10000
-GPU = [3]
+GPU = [0]
 
 
 def compute_parameter_total(trainable_variables):
@@ -76,7 +76,8 @@ with train_graph.as_default():
     # compute the fft in the time domain data.
     # x = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
     # xf = tf.spectral.fft(tf.complex(x, tf.zeros_like(x)))
-    xf = tf.spectral.rfft(x)
+    w = tfsignal.hann_window(window_size, periodic=True)
+    xf = tf.spectral.rfft(x*w)
     xf = tf.expand_dims(xf, -1)
 
     dec_learning_rate = tf.train.exponential_decay(learning_rate, global_step,
@@ -91,22 +92,19 @@ with train_graph.as_default():
         # conv1 = cc.hirose(conv1, 'mod_relu_1')
         conv1 = cc.split_relu(conv1)
         # conv1 = tf.nn.relu(conv1)
-        debug_here()
-        # conv2 = complex_conv1D(conv1, filter_width=filter_width_2, depth=d,
-        #                        stride=stride2, padding='VALID', scope='_layer2')
-        # conv2 = cc.hirose(conv2, 'mod_relu_2')
-        # conv2 = tf.nn.relu(conv2)
-        # conv2 = cc.split_relu(conv2)
         conv2 = complex_max_pool1d(conv1, [1, 1, 4, 1], [1, 1, 2, 1],
                                    padding='VALID', scope='_layer1')
-        debug_here()
+        # debug_here()
         print('conv2-shape:', conv2)
         flat = tf.reshape(conv2, [batch_size, -1])
         full = cc.split_relu(cc.complex_matmul(flat, dense_size, 'complex_dense',
                                                reuse=None, bias=True))
-        y = tf.nn.sigmoid(cc.C_to_R(full, m, reuse=None))
         # y = tf.nn.sigmoid(cc.matmul_plus_bias(tf.real(full), m, reuse=None, scope='fc'))
-        L = tf.losses.mean_squared_error(y, y_gt)
+        y = cc.C_to_R(full, m, reuse=None)
+        # y = tf.nn.sigmoid(cc.C_to_R(full, m, reuse=None))
+        # L = tf.losses.mean_squared_error(y, y_gt)
+        L = tf.losses.sigmoid_cross_entropy(multi_class_labels=y_gt,
+                                            logits=y)
     tf.summary.scalar('train_mse', L)
     gvs = optimizer.compute_gradients(L)
     with tf.variable_scope("gradient_clipping"):
@@ -122,21 +120,25 @@ with train_graph.as_default():
     parameter_total = compute_parameter_total(tf.trainable_variables())
 
 # Load the data.
+# debug_here()
 print('Loading music-Net...')
-musicNet = MusicNet(c, window_size, window_size, sampling_rate=fs)
+musicNet = MusicNet(c, fft_stride, window_size, sampling_rate=fs)
 batched_time_music_lst, batcheded_time_labels_lst = musicNet.get_test_batches(batch_size)
 
-print('parameters:', m, fs, features_idx, labels_idx, c, batch_size, filter_width,
-      filter_width_2, d, window_size, stride, stride2, learning_rate, learning_rate_decay,
-      iterations, GPU, parameter_total)
+print('parameters', 'm', m, 'fs', fs, 'c', c, 'batch_size', batch_size,
+      'filter_width', filter_width, 'd', d, 'window_size', window_size,
+      'CNN stride', stride, 'fft_stride', fft_stride, 'learning_rate', learning_rate,
+      'learning_rate_decay', learning_rate_decay, 'iterations', iterations,
+      'GPU', GPU, 'parameter_total', parameter_total)
+
 
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
             + '_lrdi_' + str(decay_iterations) \
-            + '_bs_' + str(batch_size) + '_ws_' + str(window_size) + '_fs_' + str(fs) \
+            + '_bs_' + str(batch_size) \
+            + '_ws_' + str(window_size) + '_fs_' + str(fs) \
+            + '_fft_stride_' + str(fft_stride) \
             + '_depth_' + str(d)\
-            + '_fw1_' + str(filter_width) + '_fw2_' + str(filter_width_2) \
-            + '_str1_' + str(stride) + '_str2_' + str(stride2) \
             + '_ds_' + str(dense_size) + '_loss_' + str(L.name[:-8]) \
             + '_totparam_' + str(parameter_total)
 savedir = './logs' + '/' + subfolder + '/' + time_str \
@@ -191,6 +193,12 @@ with tf.Session(graph=train_graph, config=config) as sess:
                      '\t', round(end-start, 8))
             saver.save(sess, savedir + '/weights', global_step=np_global_step)
             start = time.time()
+
+            # add average precision to tensorboard...
+            acc_value = summary_pb2.Summary.Value(tag="Accuracy",
+                                                  simple_value=average_precision[-1])
+            summary = summary_pb2.Summary(value=[acc_value])
+            summary_writer.add_summary(summary, global_step=np_global_step)
 
         batch_time_music, batched_time_labels = \
             musicNet.get_batch(musicNet.train_data, musicNet.train_ids, batch_size)

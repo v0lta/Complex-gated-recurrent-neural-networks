@@ -148,25 +148,8 @@ if 1:
     else:
         x_pad = x.astype(np.float32).transpose()
 
-    # f = tf.contrib.signal.frame(x_pad, frame_length, frame_step, pad_end=False)
-    # w = tf.contrib.signal.hann_window(frame_length, periodic=True)
-    # stfts = tf.spectral.rfft(f * w, fft_length=[frame_length])
-    # stfts = tf.spectral.rfft(f)
     stfts = tf.contrib.signal.stft(x_pad, frame_length, frame_step)
 
-    # real_frames = tf.spectral.irfft(stfts)
-    # denom = tf.square(w)
-    # overlaps = -(-frame_length // frame_step)
-    # denom = tf.pad(denom, [(0, overlaps * frame_step - frame_length)])
-    # denom = tf.reshape(denom, [overlaps, frame_step])
-    # denom = tf.reduce_sum(denom, 0, keepdims=True)
-    # denom = tf.tile(denom, [overlaps, 1])
-    # denom = tf.reshape(denom, [overlaps * frame_step])
-    # w_inv = w / (denom)
-    # real_frames = real_frames*w_inv
-
-    # if center and pad_amount > 0:
-    #     real_frames = real_frames[pad_amount // 2:-pad_amount // 2]
     output_T = tf.contrib.signal.inverse_stft(
         stfts, frame_length, frame_step,
         window_fn=tf.contrib.signal.inverse_stft_window_fn(frame_step))
