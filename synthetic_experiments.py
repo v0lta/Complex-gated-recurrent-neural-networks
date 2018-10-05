@@ -104,7 +104,7 @@ def generate_data_memory(time_steps, n_data, n_sequence):
 def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
          batch_size, GPU, memory, adding,
          cell_fun, activation, gate_activation, subfolder, gpu_mem_frac,
-         qr_steps, stiefel, real, grad_clip):
+         qr_steps, stiefel, real, grad_clip, single_gate=False):
     """
     This main function does all the experimentation.
     """
@@ -144,7 +144,7 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             cell = cell_fun(num_units=n_units, num_proj=output_size,
                             activation=activation, gate_activation=gate_activation,
                             stiefel=stiefel,
-                            real=real)
+                            real=real, single_gate=single_gate)
         elif cell_fun.__name__ == 'GRUCell':
             cell = wg.RealGRUWrapper(cell_fun(num_units=n_units), output_size)
         else:

@@ -29,13 +29,20 @@ labels_idx = 1      # second element of (X,Y) data tuple
 # Network parameters:
 c = 24              # number of context vectors
 batch_size = 5      # The number of data points to be processed in parallel.
-d = [48]            # CNN filter depth.
-filter_width = [512]  # cnn filter length
-stride = [16]
+# d = [64]            # CNN filter depth.
+filter_width = [12, 9, 9, 6, 3]  # cnn filter length
+stride = [4, 3, 3, 2, 1]
+d = [16, 32, 64, 64, 128]
+# filter_width = [256]
+# stride = [8]
+# d = [32]
+# d = [16, 32, 64, 64, 128, 128]              # CNN filter depth.
+# filter_width = [6, 3, 3, 3, 3, 3]   # CNN filter length
+# stride = [2, 2, 2, 2, 2, 1]
 assert len(d) == len(filter_width)
 assert len(filter_width) == len(stride)
 
-dense_size = 1024   # dense layer shape.
+dense_size = None   # dense layer shape.
 cell_size = 1024    # cell depth.
 CNN = True
 RNN = True
@@ -44,16 +51,16 @@ dropout = False
 
 # FFT parameters:
 # window_size = 16384
-# window_size = 4096
-window_size = 2048
-fft_stride = 256
+window_size = 4096
+# window_size = 2048
+fft_stride = 512
 
 # Training parameters:
 learning_rate = 0.0001
 learning_rate_decay = 0.9
 decay_iterations = 50000
-iterations = 350000
-GPU = [3]
+iterations = 400000
+GPU = [4]
 
 
 def compute_parameter_total(trainable_variables):
@@ -109,30 +116,45 @@ with train_graph.as_default():
     else:
         RNN_in = xf
     if RNN:
-        def define_bidirecitonal(RNN_in, cell_size, stiefel, dropout, reuse=None):
+        def define_bidirecitonal(RNN_in, cell_size, dense_size,
+                                 stiefel, dropout, reuse=None):
             cell = cc.StiefelGatedRecurrentUnit(num_units=cell_size, stiefel=stiefel,
                                                 num_proj=None, complex_input=True,
                                                 dropout=dropout, reuse=reuse)
             # Bidirectional RNN encoder.
             outputs, states = tf.nn.bidirectional_dynamic_rnn(
                 cell, cell, RNN_in, dtype=tf.float32)
-            to_decode = tf.concat([tf.complex(outputs[0][:, :, :cell_size],
-                                              outputs[0][:, :, cell_size:]),
-                                   tf.complex(outputs[1][:, :, :cell_size],
-                                              outputs[1][:, :, cell_size:])],
-                                  axis=-1)
+
             # RNN decoder.
-            decoder_cell = cc.StiefelGatedRecurrentUnit(
-                num_units=int(cell_size), stiefel=stiefel, num_proj=m,
-                complex_input=True, reuse=reuse)
-            y, _ = tf.nn.dynamic_rnn(decoder_cell, to_decode,
-                                     dtype=tf.float32)
+            if not dense_size:
+                to_decode = tf.concat([tf.complex(outputs[0][:, :, :cell_size],
+                                                  outputs[0][:, :, cell_size:]),
+                                       tf.complex(outputs[1][:, :, :cell_size],
+                                                  outputs[1][:, :, cell_size:])],
+                                      axis=-1)
+                # RNN decoder.
+                decoder_cell = cc.StiefelGatedRecurrentUnit(
+                    num_units=int(cell_size), stiefel=stiefel, num_proj=m,
+                    complex_input=True, reuse=reuse)
+                y, _ = tf.nn.dynamic_rnn(decoder_cell, to_decode,
+                                         dtype=tf.float32)
+            else:
+                # dense matmul decoder.
+                outputs = tf.concat(outputs, axis=-1)
+                to_dense_shape = outputs.get_shape().as_list()
+                to_dense = tf.reshape(outputs, [to_dense_shape[0]*to_dense_shape[1],
+                                                to_dense_shape[2]])
+                dense_out = tf.nn.relu(cc.matmul_plus_bias(to_dense, dense_size,
+                                       'dense_layer', bias=True, reuse=reuse))
+                y = cc.C_to_R(dense_out, m, reuse=reuse)
+                y = tf.reshape(y, [to_dense_shape[0], to_dense_shape[1], -1])
             return y
-        y = define_bidirecitonal(RNN_in, cell_size, stiefel, dropout)
+        y = define_bidirecitonal(RNN_in, cell_size, dense_size,
+                                 stiefel, dropout)
         if dropout:
             print('test part of graph.')
-            y_test = define_bidirecitonal(RNN_in, cell_size, stiefel,
-                                          dropout=False, reuse=True)
+            y_test = define_bidirecitonal(RNN_in, cell_size, dense_size,
+                                          stiefel, dropout=False, reuse=True)
         else:
             y_test = y
     else:
@@ -147,6 +169,7 @@ with train_graph.as_default():
 
     # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
     # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
+    # debug_here()
     L = tf.losses.sigmoid_cross_entropy(multi_class_labels=y_gt,
                                         logits=y)
     # L = tf.losses.mean_squared_error(y_gt, y)
@@ -154,7 +177,7 @@ with train_graph.as_default():
     L_test = tf.losses.sigmoid_cross_entropy(multi_class_labels=y_gt,
                                              logits=y_test)
     gvs = optimizer.compute_gradients(L)
-    tf.summary.scalar('train_mse', L)
+    tf.summary.scalar('train_l', L)
     # print(gvs)
     with tf.variable_scope("gradient_clipping"):
         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
@@ -166,35 +189,47 @@ with train_graph.as_default():
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
     saver = tf.train.Saver()
-    test_summary = tf.summary.scalar('test_mse', L_test)
+    test_summary = tf.summary.scalar('test_L', L_test)
     parameter_total = compute_parameter_total(tf.trainable_variables())
 
 # Load the data.
+# debug_here()
 print('Loading music-Net...')
 musicNet = MusicNet(c, fft_stride, window_size, sampling_rate=sampling_rate)
 batched_time_music_lst, batcheded_time_labels_lst = musicNet.get_test_batches(batch_size)
 
 print('parameters:', 'm', m, 'sampling_rate', sampling_rate, 'c', c,
       'batch_size', batch_size, 'filter_width', filter_width,
-      'd', d, window_size, 'fft_stride', fft_stride, 'stride', stride,
+      'd', d, 'stride', stride, 'dense_size', dense_size,
+      'window_size', window_size, 'fft_stride', fft_stride,
       'learning_rate', learning_rate,
       'learning_rate_decay', learning_rate_decay, 'iterations', iterations,
       'GPU', GPU, 'CNN', CNN, 'dropout', dropout, 'parameter_total', parameter_total)
 
+
+def lst_to_str(lst):
+    string = ''
+    for lst_el in lst:
+        string += str(lst_el) + '_'
+    return string
+
+
 time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
-            + '_lrdi_' + str(decay_iterations) \
+            + '_lrdi_' + str(decay_iterations) + '_it_' + str(iterations) \
             + '_bs_' + str(batch_size) + '_ws_' + str(window_size) \
             + 'fft_stride' + str(fft_stride) + '_fs_' + str(sampling_rate)
 if CNN:
-    param_str += '_fw1_' + str(filter_width)  \
-        + '_str_' + str(stride) + '_depth_' + str(d)
+    param_str += '_fw_' + lst_to_str(filter_width)  \
+        + '_str_' + lst_to_str(stride) + '_depth_' + lst_to_str(d)
 param_str += '_loss_' + str(L.name[:-8]) \
              + '_cnn_' + str(CNN) + '_dropout_' + str(dropout) \
-             + '_cs_' + str(cell_size) + '_c_' + str(c) \
+             + '_cs_' + str(cell_size) + '_ds_' + str(dense_size) \
+             + '_c_' + str(c) \
              + '_totparam_' + str(parameter_total)
 savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
+# debug_here()
 summary_writer = tf.summary.FileWriter(savedir, graph=train_graph)
 
 square_error = []

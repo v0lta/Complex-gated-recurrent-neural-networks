@@ -664,7 +664,8 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                  gate_activation=mod_sigmoid,
                  num_proj=None, reuse=None, stiefel=True,
                  real=False, real_double=False,
-                 complex_input=False, dropout=False):
+                 complex_input=False, dropout=False,
+                 single_gate=False):
         """
         Params:
             num_units: The size of the hidden state.
@@ -689,7 +690,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
         self._input_split_matmul = False
         self._stiefel = stiefel
         self._gate_activation = gate_activation
-        self._single_gate = False
+        self._single_gate = single_gate
         self._real = real
         self._real_double = False
         self._complex_input = complex_input

@@ -1,6 +1,6 @@
 ## log directories.
 logs/
-wmt/
+WMT/
 human-motion-exp/experiments/
 human-motion-exp/experiments_window_td_fix/
 human-motion-exp/experiments_window
