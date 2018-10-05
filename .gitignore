@@ -2,7 +2,7 @@
 logs/
 wmt/
 human-motion-exp/experiments/
-human-motion-exp/experiments_window_td_fix
+human-motion-exp/experiments_window_td_fix/
 human-motion-exp/experiments_window
 human-motion-exp/experiments_pre_window/
 human-motion-exp/experiments_old/
