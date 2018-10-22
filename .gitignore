@@ -14,6 +14,10 @@ music_exp/numpy/
 music_exp/logs/
 music_exp/thickstun/
 
+# video and compressed files.
+*.zip
+*.mp4
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
