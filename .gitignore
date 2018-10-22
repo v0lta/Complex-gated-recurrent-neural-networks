@@ -1,6 +1,8 @@
 ## log directories.
 logs/
+WMT/
 human-motion-exp/experiments/
+human-motion-exp/experiments_window_td_fix/
 human-motion-exp/experiments_window
 human-motion-exp/experiments_pre_window/
 human-motion-exp/experiments_old/
@@ -11,6 +13,10 @@ music_exp/raw_data/
 music_exp/numpy/
 music_exp/logs/
 music_exp/thickstun/
+
+# video and compressed files.
+*.zip
+*.mp4
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

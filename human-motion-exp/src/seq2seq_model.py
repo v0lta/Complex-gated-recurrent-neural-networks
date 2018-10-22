@@ -10,6 +10,7 @@ from tensorflow.python.ops import variable_scope as vs
 from custom_optimizers import RMSpropNatGrad
 
 import random
+import functools
 
 import numpy as np
 import os
@@ -46,6 +47,7 @@ class Seq2SeqModel(object):
                fft=True,
                window_size=30,
                step_size=10,
+               window_fun='hann',
                gaussian_scaling=False):
     """Create the model.
     Args:
@@ -123,13 +125,23 @@ class Seq2SeqModel(object):
         pad_enc_in = tf.stack(enc_in, axis=-1)
         pad_amount = 2 * (window_size - step_size)
         print('padding with', [pad_amount // 2, pad_amount // 2])
+        # debug_here()
         pad_enc_in = tf.pad(pad_enc_in,
                        [[0, 0], [0, 0], [pad_amount // 2, pad_amount // 2]], 'REFLECT')
       else:
         pad_enc_in = tf.stack(enc_in, axis=-1)
 
       # transform input and output.
-      fft_enc_in = tfsignal.stft(pad_enc_in, window_size, step_size)
+      if window_fun == 'hann':
+        w = functools.partial(tf.contrib.signal.hann_window, periodic=True)
+      elif window_fun == 'hamming':
+        w = functools.partial(tf.contrib.signal.hamming_window, periodic=True)
+      elif window_fun == 'None':
+        w = None
+      else:
+        raise ValueError("unknown window function.") 
+      fft_enc_in = tfsignal.stft(pad_enc_in, window_size, step_size,
+                                 window_fn=w)
       print('fft_enc_in.shape', fft_enc_in.shape)
       batch_size = tf.shape(fft_enc_in)[0]
       freq_tensor_shape = fft_enc_in.get_shape().as_list()
@@ -145,7 +157,8 @@ class Seq2SeqModel(object):
                        [[0, 0], [0, 0], [pad_amount // 2, pad_amount // 2]], 'REFLECT')
       else:
         pad_dec_in = tf.stack(dec_in, axis=-1)
-      fft_dec_in = tfsignal.stft(pad_dec_in, window_size, step_size)
+      fft_dec_in = tfsignal.stft(pad_dec_in, window_size, step_size,
+                                 window_fn=w)
       print('fft_dec_in.shape', fft_dec_in.shape)
       batch_size = tf.shape(fft_dec_in)[0]
       freq_tensor_shape = fft_dec_in.get_shape().as_list()
@@ -216,13 +229,17 @@ class Seq2SeqModel(object):
       spec_out = tf.reshape(tf.stack(outputs, -1),
                             [batch_size, self.input_size, fft_unique_bins_dec, len(outputs)])
       spec_out = tf.transpose(spec_out, [0, 1, 3, 2])
+
+      if w:
+          iw = tf.contrib.signal.inverse_stft_window_fn(step_size,
+                                                        forward_window_fn=w)
+      else:
+          iw = None
+
       outputs = tfsignal.inverse_stft(spec_out, window_size, step_size,
-                                      window_fn=tf.contrib.signal.inverse_stft_window_fn(step_size))
-      # debug_here()
+                                      window_fn=iw)
       if center and pad_amount > 0:
           outputs = outputs[:, :, pad_amount // 2:-pad_amount // 2]
-      else:
-          outputs = tf.transpose(outputs)
       outputs.set_shape([None, self.input_size, target_seq_len])
       outputs = tf.unstack(outputs, axis=-1, name='result_unstack')
       
@@ -649,5 +666,5 @@ class Seq2SeqModel(object):
       decoder_inputs[i, :, :]  = data_sel[source_seq_len-1:(source_seq_len+target_seq_len-1), :]
       decoder_outputs[i, :, :] = data_sel[source_seq_len:, :]
 
-
+    # debug_here()
     return encoder_inputs, decoder_inputs, decoder_outputs

@@ -61,6 +61,7 @@ class MusicNet(object):
            and np.array(labels).shape == (self._c, self._m):
             pass
         else:
+            print('incorrect array dimensions!')
             debug_here()
         return np.array(time_music), np.array(labels)
 
@@ -86,7 +87,7 @@ class MusicNet(object):
             record_with_label = data[data_indices[dat_idx]]
             offset = self._window_size/2 + self._c*self._window_size
             rec_idx = np.random.randint(offset, len(record_with_label[features_idx])
-                                        - self._window_size/2)
+                                        - self._window_size)
             time_music, labels = self.select(record_with_label, rec_idx)
             if time_music.shape == (self._c, self._window_size) \
                and labels.shape == (self._c, self._m):

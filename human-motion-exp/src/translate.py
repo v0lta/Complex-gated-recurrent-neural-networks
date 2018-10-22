@@ -54,6 +54,7 @@ tf.app.flags.DEFINE_boolean("stiefel", False, "Use unitarity preserving weight u
 tf.app.flags.DEFINE_boolean("fft", False, "Do frequency domain motion analysis.")
 tf.app.flags.DEFINE_integer("GPU", 0, "Choose a GPU.")
 tf.app.flags.DEFINE_integer("window_size", 30, "Set the fft window size.")
+tf.app.flags.DEFINE_string("window_fun", 'hann', "Chosse hann, hamming or None")
 tf.app.flags.DEFINE_integer("step_size", 5, "Set the fft window step size.")
 
 
@@ -72,7 +73,8 @@ train_dir = os.path.normpath(os.path.join( FLAGS.train_dir, FLAGS.action,
   'custom_opt' if FLAGS.stiefel else 'RMSProp',
   'cgru' if FLAGS.cgru else 'gru',
   'fft_{0}'.format(FLAGS.window_size) if FLAGS.fft else 'time',
-  'fft_step_{0}'.format(FLAGS.step_size) if FLAGS.fft else ''))
+  'fft_step_{0}'.format(FLAGS.step_size) if FLAGS.fft else '',
+  FLAGS.window_fun)) # if FLAGS.fft else '' TODO: replace me.
 
 summaries_dir = os.path.normpath(os.path.join( train_dir, "log_complex" )) # Directory for TB summaries
 
@@ -98,7 +100,7 @@ def create_model(session, actions, sampling=False):
   model = seq2seq_model.Seq2SeqModel(
       FLAGS.architecture,
       FLAGS.seq_length_in if not sampling else 61,
-      FLAGS.seq_length_out if not sampling else 90,
+      FLAGS.seq_length_out if not sampling else 64,
       FLAGS.size, # hidden layer size
       FLAGS.num_layers,
       FLAGS.max_gradient_norm,
@@ -115,6 +117,7 @@ def create_model(session, actions, sampling=False):
       fft=FLAGS.fft,
       window_size=FLAGS.window_size,
       step_size=FLAGS.step_size,
+      window_fun=FLAGS.window_fun,
       dtype=tf.float32)
 
   if FLAGS.load <= 0:
@@ -165,7 +168,8 @@ def train():
         'cgru', str(FLAGS.cgru) + '\n',
         'fft', str(FLAGS.fft) + '\n',
         'window_size', str(FLAGS.window_size) + '\n',
-        'step_size', str(FLAGS.step_size))
+        'step_size', str(FLAGS.step_size)  + '\n',
+        'window_fun', str(FLAGS.window_fun))
 
   actions = define_actions( FLAGS.action )
 
@@ -607,7 +611,7 @@ def sample():
     sampling     = True
     model = create_model(sess, actions, sampling)
     print("Model created")
-
+    # debug_here()
     # Load all the data
     train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
       actions, FLAGS.seq_length_in, FLAGS.seq_length_out, FLAGS.data_dir, not FLAGS.omit_one_hot )
@@ -633,6 +637,7 @@ def sample():
       encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch_srnn( test_set, action )
       forward_only = True
       srnn_seeds = True
+      # debug_here()
       srnn_loss, srnn_poses, _ = model.step(sess, encoder_inputs, decoder_inputs, 
           decoder_outputs, forward_only, srnn_seeds)
 
