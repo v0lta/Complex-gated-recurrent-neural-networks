@@ -169,16 +169,12 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
             loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=y_hat, labels=y))
             tf.summary.scalar('cross_entropy', loss)
-        # optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=decay)
         optimizer = RMSpropNatGrad(learning_rate=learning_rate, decay=decay,
                                    global_step=global_step, qr_steps=qr_steps)
         if grad_clip:
             with tf.variable_scope("gradient_clipping"):
                 gvs = optimizer.compute_gradients(loss)
-                # print(gvs)
                 capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-                # capped_gvs = [(tf.clip_by_norm(grad, 2.0), var) for grad, var in gvs]
-                # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
                 train_op = optimizer.apply_gradients(capped_gvs, global_step=global_step)
         else:
             train_op = optimizer.minimize(loss, global_step=global_step)
@@ -186,9 +182,9 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
         summary_op = tf.summary.merge_all()
         parameter_total = compute_parameter_total(tf.trainable_variables())
 
+    # choose the GPU to use and how much memory we require.
     gpu_options = tf.GPUOptions(visible_device_list=str(GPU),
                                 per_process_gpu_memory_fraction=gpu_mem_frac)
-    # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0)
     config = tf.ConfigProto(allow_soft_placement=True,
                             log_device_placement=False,
                             gpu_options=gpu_options)
@@ -200,7 +196,6 @@ def main(time_steps, n_train, n_test, n_units, learning_rate, decay,
     param_str = problem + '_' + str(time_steps) + '_' + str(n_train) \
         + '_' + str(n_test) + '_' + str(n_units) + '_' + str(learning_rate) \
         + '_' + str(batch_size) + '_clipping_' + str(grad_clip)
-    # TODO. add statement checking if the nat grad optimizer is there.
     if cell.__class__.__name__ is "UnitaryCell" or \
        cell.__class__.__name__ is "StiefelGatedRecurrentUnit":
         param_str += '_' + cell.to_string()

@@ -29,22 +29,9 @@ labels_idx = 1      # second element of (X,Y) data tuple
 # Network parameters:
 c = 24              # number of context vectors
 batch_size = 5      # The number of data points to be processed in parallel.
-# d = [64]          # CNN filter depth.
-filter_width = [12, 9, 9, 6]  # cnn filter length
-stride = [4, 3, 3, 2]
-d = [16, 32, 64, 128]
-# filter_width = [256]
-# stride = [8]
-# d = [32]
-# d = [16, 32, 64, 64, 128, 128]      # CNN filter depth.
-# filter_width = [6, 3, 3, 3, 3, 3]   # CNN filter length
-# stride = [2, 2, 2, 2, 2, 1]
-assert len(d) == len(filter_width)
-assert len(filter_width) == len(stride)
 
 dense_size = 1024   # dense layer shape.
 cell_size = 1024    # cell depth.
-CNN = False
 RNN = True
 stiefel = False
 dropout = False
@@ -99,22 +86,6 @@ with train_graph.as_default():
     optimizer = tf.train.RMSPropOptimizer(dec_learning_rate)
     tf.summary.scalar('learning_rate', dec_learning_rate)
 
-    if CNN:
-        with tf.variable_scope('complex_CNN'):
-            xfd = tf.reshape(xf, [batch_size*c, -1])
-            xfd = tf.expand_dims(xfd, -1)
-
-            conv = [xfd]
-            for layer_no, layer_d in enumerate(d):
-                conv_tmp = complex_conv1D(conv[-1], filter_width=filter_width[layer_no],
-                                          depth=layer_d, stride=stride[layer_no],
-                                          padding='VALID', scope='_layer' + str(layer_no))
-                conv.append(cc.split_relu(conv_tmp))
-                print('conv2 shape', conv[-1].shape)
-            flat = tf.reshape(conv[-1], [batch_size, c, -1])
-            RNN_in = flat
-    else:
-        RNN_in = xf
     if RNN:
         def define_bidirecitonal(RNN_in, cell_size, dense_size,
                                  stiefel, dropout, reuse=None):
@@ -149,11 +120,11 @@ with train_graph.as_default():
                 y = cc.C_to_R(dense_out, m, reuse=reuse)
                 y = tf.reshape(y, [to_dense_shape[0], to_dense_shape[1], -1])
             return y
-        y = define_bidirecitonal(RNN_in, cell_size, dense_size,
+        y = define_bidirecitonal(xf, cell_size, dense_size,
                                  stiefel, dropout)
         if dropout:
             print('test part of graph.')
-            y_test = define_bidirecitonal(RNN_in, cell_size, dense_size,
+            y_test = define_bidirecitonal(xf, cell_size, dense_size,
                                           stiefel, dropout=False, reuse=True)
         else:
             y_test = y
@@ -199,12 +170,10 @@ musicNet = MusicNet(c, fft_stride, window_size, sampling_rate=sampling_rate)
 batched_time_music_lst, batcheded_time_labels_lst = musicNet.get_test_batches(batch_size)
 
 print('parameters:', 'm', m, 'sampling_rate', sampling_rate, 'c', c,
-      'batch_size', batch_size, 'filter_width', filter_width,
-      'd', d, 'stride', stride, 'dense_size', dense_size,
-      'window_size', window_size, 'fft_stride', fft_stride,
-      'learning_rate', learning_rate,
+      'batch_size', batch_size, 'window_size', window_size,
+      'fft_stride', fft_stride, 'learning_rate', learning_rate,
       'learning_rate_decay', learning_rate_decay, 'iterations', iterations,
-      'GPU', GPU, 'CNN', CNN, 'dropout', dropout, 'parameter_total', parameter_total)
+      'GPU', GPU, 'dropout', dropout, 'parameter_total', parameter_total)
 
 
 def lst_to_str(lst):
@@ -219,11 +188,8 @@ param_str = 'lr_' + str(learning_rate) + '_lrd_' + str(learning_rate_decay) \
             + '_lrdi_' + str(decay_iterations) + '_it_' + str(iterations) \
             + '_bs_' + str(batch_size) + '_ws_' + str(window_size) \
             + 'fft_stride' + str(fft_stride) + '_fs_' + str(sampling_rate)
-if CNN:
-    param_str += '_fw_' + lst_to_str(filter_width)  \
-        + '_str_' + lst_to_str(stride) + '_depth_' + lst_to_str(d)
 param_str += '_loss_' + str(L.name[:-8]) \
-             + '_cnn_' + str(CNN) + '_dropout_' + str(dropout) \
+             + '_dropout_' + str(dropout) \
              + '_cs_' + str(cell_size) + '_ds_' + str(dense_size) \
              + '_c_' + str(c) \
              + '_totparam_' + str(parameter_total)
