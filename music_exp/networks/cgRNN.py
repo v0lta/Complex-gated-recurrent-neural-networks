@@ -19,7 +19,7 @@ debug_here = Tracer()
 
 
 # where to store the logfiles.
-subfolder = 'cgRNN_hannwin'
+subfolder = 'cgRNN_only'
 
 m = 128         # number of notes
 sampling_rate = 11000      # samples/second
@@ -29,30 +29,30 @@ labels_idx = 1      # second element of (X,Y) data tuple
 # Network parameters:
 c = 24              # number of context vectors
 batch_size = 5      # The number of data points to be processed in parallel.
-# d = [64]            # CNN filter depth.
-filter_width = [12, 9, 9, 6, 3]  # cnn filter length
-stride = [4, 3, 3, 2, 1]
-d = [16, 32, 64, 64, 128]
+# d = [64]          # CNN filter depth.
+filter_width = [12, 9, 9, 6]  # cnn filter length
+stride = [4, 3, 3, 2]
+d = [16, 32, 64, 128]
 # filter_width = [256]
 # stride = [8]
 # d = [32]
-# d = [16, 32, 64, 64, 128, 128]              # CNN filter depth.
+# d = [16, 32, 64, 64, 128, 128]      # CNN filter depth.
 # filter_width = [6, 3, 3, 3, 3, 3]   # CNN filter length
 # stride = [2, 2, 2, 2, 2, 1]
 assert len(d) == len(filter_width)
 assert len(filter_width) == len(stride)
 
-dense_size = None   # dense layer shape.
+dense_size = 1024   # dense layer shape.
 cell_size = 1024    # cell depth.
-CNN = True
+CNN = False
 RNN = True
 stiefel = False
 dropout = False
 
 # FFT parameters:
 # window_size = 16384
-window_size = 4096
-# window_size = 2048
+# window_size = 4096
+window_size = 2048
 fft_stride = 512
 
 # Training parameters:
@@ -60,7 +60,7 @@ learning_rate = 0.0001
 learning_rate_decay = 0.9
 decay_iterations = 50000
 iterations = 400000
-GPU = [4]
+GPU = [7]
 
 
 def compute_parameter_total(trainable_variables):
@@ -230,6 +230,7 @@ param_str += '_loss_' + str(L.name[:-8]) \
 savedir = './logs' + '/' + subfolder + '/' + time_str \
           + '_' + param_str
 # debug_here()
+print(savedir)
 summary_writer = tf.summary.FileWriter(savedir, graph=train_graph)
 
 square_error = []
@@ -257,7 +258,8 @@ with tf.Session(graph=train_graph, config=config) as sess:
             square_error.append(L_np)
             summary_writer.add_summary(test_summary_eval, global_step=global_step_eval)
 
-        if i % 5000 == 0:
+        # if i % 5000 == 0:
+        if i % 5000 == 0 and i > 0:
             # run trough the entire test set.
             yflat = np.array([])
             yhatflat = np.array([])
@@ -296,6 +298,8 @@ with tf.Session(graph=train_graph, config=config) as sess:
             sess.run([L, y, y_gt, training_step, summary_op, global_step],
                      feed_dict=feed_dict)
         summary_writer.add_summary(summaries, global_step=np_global_step)
+        # if i % 10 == 0:
+        #     print('loss', loss)
 
     # save the network
     saver.save(sess, savedir + '/weights/', global_step=np_global_step)

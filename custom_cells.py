@@ -779,7 +779,6 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                                             bias_init=bias_init)
                     gz2 = ghz2 + gxz2
                     z = self._gate_activation([gz, gz2], 'z', self._reuse)
-
             else:
                 ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
                 gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,

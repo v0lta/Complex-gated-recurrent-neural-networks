@@ -183,23 +183,32 @@ def main():
                         offset, rotInd, expmapInd)
 
   # === Plot and animate ===
+  import matplotlib.animation as manimation
+  FFMpegWriter = manimation.writers['ffmpeg']
+  metadata = dict(title='Movie Test', artist='Matplotlib',
+                  comment='Movie support!')
+  writer = FFMpegWriter(fps=15, metadata=metadata)
+
   fig = plt.figure()
   ax = plt.gca(projection='3d')
   ob = viz.Ax3DPose(ax)
 
   # Plot the conditioning ground truth
-  for i in range(nframes_gt):
-    ob.update( xyz_gt[i,:] )
-    plt.show(block=False)
-    fig.canvas.draw()
-    plt.pause(0.01)
+  with writer.saving(fig, 'mocap_pred_anim.mp4', 100):
+    for i in range(nframes_gt):
+      ob.update( xyz_gt[i,:] )
+      # plt.show(block=False)
+      # fig.canvas.draw()
+      writer.grab_frame()
+      # plt.pause(0.01)
 
-  # Plot the prediction
-  for i in range(nframes_pred):
-    ob.update( xyz_pred[i,:], lcolor="#9b59b6", rcolor="#2ecc71" )
-    plt.show(block=False)
-    fig.canvas.draw()
-    plt.pause(0.01)
+    # Plot the prediction
+    for i in range(nframes_pred):
+      ob.update( xyz_pred[i,:], lcolor="#9b59b6", rcolor="#2ecc71" )
+      # plt.show(block=False)
+      # fig.canvas.draw()
+      writer.grab_frame()
+      # plt.pause(0.01)
 
 
 if __name__ == '__main__':
