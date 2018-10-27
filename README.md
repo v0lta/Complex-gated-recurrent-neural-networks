@@ -1,3 +1,5 @@
+More and better documentation is coming soon!
+
 Code for our paper on complex gated recurrent neural networks.
 
 Use the montreal_eval.py file to recreate our experiments on the memory and adding problem.
