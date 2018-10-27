@@ -35,16 +35,10 @@ from IPython.core.debugger import Tracer
 debug_here = Tracer()
 
 if __name__ == "__main__":
-    # time_steps=100, n_train=int(2e6), n_test=int(1e4),
-    # n_units=512, learning_rate=1e-3, decay=0.9,
-    # batch_size=50, GPU=0, memory=False, adding=True,
-    # cell_fun=tf.contrib.rnn.LSTMCell
 
-    # iterations_per_exp = 2
     iterations_per_exp = 20
 
     time_steps = 250
-    # time_steps = 100
     n_train = int(9e5)
     n_test = int(1e4)
     n_units = 80

@@ -1,3 +1,8 @@
+"""
+This script contains the code to reproduce the cgRNN music
+transcription experiment in section 5.5.
+"""
+
 # Do the imports.
 import sys
 import time
@@ -145,25 +150,16 @@ with train_graph.as_default():
         y = tf.expand_dims(y, axis=1)
         y_test = y
 
-    # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
-    # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
-    # debug_here()
     L = tf.losses.sigmoid_cross_entropy(multi_class_labels=y_gt,
                                         logits=y)
-    # L = tf.losses.mean_squared_error(y_gt, y)
-    # L_test = tf.losses.mean_squared_error(y_gt, y_test)
     L_test = tf.losses.sigmoid_cross_entropy(multi_class_labels=y_gt,
                                              logits=y_test)
     gvs = optimizer.compute_gradients(L)
     tf.summary.scalar('train_l', L)
-    # print(gvs)
     with tf.variable_scope("gradient_clipping"):
         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-        # capped_gvs = [(tf.clip_by_norm(grad, 2.0), var) for grad, var in gvs]
-        # loss = tf.Print(loss, [tf.reduce_mean(gvs[0]) for gv in gvs])
         training_step = optimizer.apply_gradients(capped_gvs,
                                                   global_step=global_step)
-    # training_step = optimizer.minimize(L)
     init_op = tf.global_variables_initializer()
     summary_op = tf.summary.merge_all()
     saver = tf.train.Saver()

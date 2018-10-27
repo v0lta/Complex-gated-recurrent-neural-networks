@@ -1,3 +1,8 @@
+'''
+This module contains code to load and prepare the
+music net data set.
+'''
+
 import numpy as np
 from IPython.core.debugger import Tracer
 debug_here = Tracer()
@@ -7,11 +12,38 @@ labels_idx = 1      # second element of (X,Y) data tuple
 
 
 class MusicNet(object):
+    """Creat a music net handler class.
+    """
+
     def __init__(self, c=24, stride=512, window_size=2048,
                  sampling_rate=44100, path='numpy/'):
+        """ Set up the music net data set handler:
+
+        Arguments:
+            c: The number of consequtive windows per
+               training batches. In the RNN case, this
+               is the number of context batches taken into
+               account.
+            stride: The spacing between the context batches.
+            window_size: The number of samples per window.
+            sampling_rate: The number of samples per second.
+                           Either 44100 as in [1] or
+                           11000 as in [2]
+            path: The path where the numpy array dumps are
+                  stored.
+
+        [1] Learning Features of Music from Scratch
+            John Thickstun, Zaid Harchaoui, Sham Kakade
+            https://arxiv.org/abs/1611.09827
+
+        [2] Deep Complex Networks
+            Chiheb Trabelsi et al.
+            https://arxiv.org/abs/1705.09792
+        """
         self._c = c
         self._stride = stride
         self._window_size = window_size
+        # Set the number of music notes we want to recognize in total.
         self._m = 128
         if sampling_rate == 44100:
             path = path + 'musicnet.npz'
@@ -27,7 +59,7 @@ class MusicNet(object):
         with open(path, 'rb') as data_file:
             self.train_data = dict(np.load(data_file, encoding='latin1'))
         print('musicnet loaded.')
-        # split our the test set
+        # store the testing data seperately.
         self.test_data = dict()
         for id in (2303, 2382, 1819):  # test set
             self.test_data[str(id)] = self.train_data.pop(str(id))
@@ -38,10 +70,19 @@ class MusicNet(object):
         print('splitting done.')
         print(len(self.train_data))
         print(len(self.test_data))
-        assert window_size > 0
 
-    # data selection funciton
     def select(self, data, index):
+        """ Helper function which returns a series
+            of windowed samples and their labels.
+
+        Arguments:
+            data: The full numpy array
+            index: The sample where the last
+                   window ends:
+        Returns:
+            windowed_data [c, window_size]
+            labels: [c, label_no]
+        """
         time_music = []
         labels = []
         for cx in range(0, self._c):
@@ -68,7 +109,7 @@ class MusicNet(object):
     def get_batch(self, data, data_indices, batch_size):
         """
         Get a training batch.
-        Args:
+        Arguments:
             data: Dictionary {file_id, time_domain_numpy_array}
             data_indices: The file_id dictionary keys for data.
             batch_size: The batch size used in the graph.
@@ -109,6 +150,12 @@ class MusicNet(object):
     def get_test_batches(self, batch_size):
         """
         Set up the test set lists.
+        Arguments:
+            batch_size: Number of training sample sequences,
+                        per batch.
+        Returns:
+            batched_music_lst: [batch_size, c, window_size]
+            batched_labels_lst: [batch_size, c, m]
         """
         data = self.test_data
         data_indices = self.test_ids
@@ -146,6 +193,6 @@ class MusicNet(object):
             Ytest = np.array(Ytest)
         # Reshape and check the shapes.
         batched_music_lst = np.split(Xtest, int(Xtest.shape[0]/batch_size), axis=0)
-        batcheded_labels_lst = np.split(Ytest, int(Xtest.shape[0]/batch_size), axis=0)
-        assert len(batched_music_lst) == len(batcheded_labels_lst)
-        return batched_music_lst, batcheded_labels_lst
+        batched_labels_lst = np.split(Ytest, int(Xtest.shape[0]/batch_size), axis=0)
+        assert len(batched_music_lst) == len(batched_labels_lst)
+        return batched_music_lst, batched_labels_lst
