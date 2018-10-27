@@ -27,12 +27,12 @@ features_idx = 0    # first element of (X,Y) data tuple
 labels_idx = 1      # second element of (X,Y) data tuple
 
 # Network parameters:
-c = 24              # number of context vectors
+c = 1              # number of context vectors
 batch_size = 5      # The number of data points to be processed in parallel.
 
 dense_size = 1024   # dense layer shape.
 cell_size = 1024    # cell depth.
-RNN = True
+RNN = False
 stiefel = False
 dropout = False
 
@@ -47,11 +47,11 @@ learning_rate = 0.0001
 learning_rate_decay = 0.9
 decay_iterations = 50000
 iterations = 45000
-GPU = [7]
+GPU = [0]
 
-visualize = True
-init_from = 25000
-train = False
+visualize = False
+init_from = 0
+train = True
 restdir = './logs' + '/' + subfolder + '/' \
     '2018-10-22 16:26:35_lr_0.0001_lrd_0.9_lrdi_50000_it_45000_bs_5_ws_2048_fft_stride_512_fs_11000_loss_sigmoid_cross_entropy_loss_dropout_False_cs_1024_ds_1024_c_24_totparam_29647878'
 
@@ -138,11 +138,12 @@ with train_graph.as_default():
         if c != 1:
             raise ValueError("c must be one for non RNN networks.")
 
-        full = cc.split_relu(cc.complex_matmul(y, dense_size, 'complex_dense',
+        xf = tf.squeeze(xf, axis=1)
+        full = cc.split_relu(cc.complex_matmul(xf, dense_size, 'complex_dense',
                                                reuse=None, bias=True))
         y = tf.nn.sigmoid(cc.C_to_R(full, m, reuse=None))
-        y = y[:, -1, :]
-        y_gt = y_gt[:, -1, :]
+        y = tf.expand_dims(y, axis=1)
+        y_test = y
 
     # L = tf.losses.sigmoid_cross_entropy(y[:, -1, :], y_[:, -1, :])
     # L = tf.reduce_mean(tf.nn.l2_loss(y[:, -1, :] - y_[:, -1, :]))
@@ -214,15 +215,10 @@ with tf.Session(graph=train_graph, config=config) as sess:
     start = time.time()
     print('Initialize...')
     if init_from:
-        # TODO: add proper step here.
         saver.restore(sess, restdir + '/step_' + str(init_from)
                       + '/model.ckpt')
     else:
         init_op.run(session=sess)
-
-    # if 1:
-    #     saver.save(sess, savedir + '/' + 'model.ckpt')
-    #     saver.restore(sess, savedir + '/model.ckpt')
 
     if train:
         print('Training...')
@@ -252,9 +248,14 @@ with tf.Session(graph=train_graph, config=config) as sess:
                     loss, Yhattest, np_global_step =  \
                         sess.run([L_test, y_test, global_step], feed_dict=feed_dict)
                     losses_lst.append(loss)
-                    center = int(c/2.0)
-                    yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
-                    yflat = np.append(yflat, batched_time_labels[:, center, :].flatten())
+                    if RNN:
+                        center = int(c/2.0)
+                        yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
+                        yflat = np.append(yflat,
+                                          batched_time_labels[:, center, :].flatten())
+                    else:
+                        yhatflat = np.append(yhatflat, Yhattest.flatten())
+                        yflat = np.append(yflat, batched_time_labels.flatten())
                 average_precision.append(average_precision_score(yflat,
                                                                  yhatflat))
                 end = time.time()
@@ -299,7 +300,14 @@ with tf.Session(graph=train_graph, config=config) as sess:
             loss, Yhattest, np_global_step =  \
                 sess.run([L_test, y_test, global_step], feed_dict=feed_dict)
             losses_lst.append(loss)
-            center = int(c/2.0)
+            if RNN:
+                center = int(c/2.0)
+                yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
+                yflat = np.append(yflat,
+                                  batched_time_labels[:, center, :].flatten())
+            else:
+                yhatflat = np.append(yhatflat, Yhattest.flatten())
+                yflat = np.append(yflat, batched_time_labels.flatten())
             yhatflat = np.append(yhatflat, Yhattest[:, center, :].flatten())
             yflat = np.append(yflat, batched_time_labels[:, center, :].flatten())
             decode_gt.append(batched_time_labels[:, center, :])

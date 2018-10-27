@@ -7,6 +7,9 @@ debug_here = Tracer()
 def complex_dropout(x, keep_prob, noise_shape=None, seed=None, name=None):
     '''
     Implementation of complex dropout based on tf.nn.dropout.
+    The idea is straightforward, just like its done in the real
+    case if a complex number is dropped out it is set to zero.
+    The remaining numbers are scaled according to the keep probability.
     '''
     with tf.name_scope(name, "complex_dropout", [x]) as name:
         # Early return if nothing needs to be dropped.

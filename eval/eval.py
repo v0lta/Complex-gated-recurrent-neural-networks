@@ -7,7 +7,7 @@ np.set_printoptions(6, suppress=False, formatter=None)
 # np.set_printoptions(formatter={'float': lambda x: format(x, '6.3e')})
 
 
-def print_analysis(logs, threshold, plot=True):
+def print_analysis(logs, window_size, threshold, plot=True):
         regex = r"_gate_activation_(.+?)_nat_grad"
 
         double_gate = False
@@ -74,7 +74,8 @@ def print_analysis(logs, threshold, plot=True):
             print('exp              ', 'iterations         ', '% converged')
             conv_rate = len(real_mod_sigmoid_beta_lst)/20.0
             if len(real_mod_sigmoid_beta_lst) > 0:
-                print('real_mod_sigmoid_beta', np.mean(real_mod_sigmoid_beta_lst),
+                print('real_mod_sigmoid_beta', np.mean(real_mod_sigmoid_beta_lst)
+                      * window_size,
                       '        ', conv_rate)
             else:
                 print('real_mod_sigmoid_beta', 'nan', '        ', conv_rate)
@@ -85,12 +86,13 @@ def print_analysis(logs, threshold, plot=True):
             conv_rate_urnn = len(urnn_lst)/20.0
             print('exp              ', 'iterations         ', '% converged')
             if len(mod_sigmoid_beta_lst) > 0:
-                print('mod_sigmoid_beta', np.mean(mod_sigmoid_beta_lst),
+                print('mod_sigmoid_beta', np.mean(mod_sigmoid_beta_lst) * window_size,
                       conv_rate_g)
             else:
                 print('mod_sigmoid_beta', 'nan', conv_rate_g)
             if len(urnn_lst) > 0:
-                print('urnn                 ', np.mean(urnn_lst), conv_rate_urnn)
+                print('urnn                 ', np.mean(urnn_lst) * window_size,
+                      conv_rate_urnn)
             else:
                 print('urnn                 ', 'nan', conv_rate_urnn)
         else:
@@ -98,7 +100,7 @@ def print_analysis(logs, threshold, plot=True):
             for no, exp in enumerate(exp_names):
                 conv_rate = len(results[no])/20.0
                 if len(results[no]) > 0:
-                    print(exp, np.mean(results[no]), '        ', conv_rate)
+                    print(exp, np.mean(results[no]) * window_size, '        ', conv_rate)
                 else:
                     print(exp, 'nan', '        ', conv_rate)
 
@@ -119,7 +121,7 @@ if 1:
 
     print('~~~~~~~~~~~~~~~~ Gate variation experiments ~~~~~~~~~~~~~~~~')
     # sum gate variation study.
-    adding_path = '../logs/gate_variation_study_test/' + 'exp_res.pkl'
+    adding_path = '../../complex_RNN/logs/gate_variation_study_test/' + 'exp_res.pkl'
     adding_exps = pickle.load(open(adding_path, 'rb'))
     adding_data = np.array(adding_exps[0])
 
@@ -134,7 +136,7 @@ if 1:
               mode_train[exp_no, :], var_train[exp_no, :])
 
     # memory gate variation study.
-    memory_path = '../logs/gate_variation_study_test_2/' + 'exp_res.pkl'
+    memory_path = '../../complex_RNN/logs/gate_variation_study_test_2/' + 'exp_res.pkl'
     memory_exps = pickle.load(open(memory_path, 'rb'))
     memory_data = np.array(memory_exps[0])
 
@@ -153,20 +155,20 @@ if 1:
 if 1:
     # adding
     print('------------------- adding problem logs --------------------')
-    adding_path = '../logs/gate_variation_study_test/'
+    adding_path = '../../complex_RNN/logs/gate_variation_study_test/'
     logs = return_logs(path=adding_path, window_size=50, vtag='mse')
-    adding_res = print_analysis(logs, threshold=0.01)
+    adding_res = print_analysis(logs, window_size=50, threshold=0.01)
 
     # memory
     print('------------------- memory problem logs --------------------')
-    memory_path = '../logs/gate_variation_study_test_2/'
+    memory_path = '../../complex_RNN/logs/gate_variation_study_test_2/'
     logs = return_logs(path=memory_path, window_size=50, vtag='cross_entropy')
-    mem_res = print_analysis(logs, threshold=5e-7)
+    mem_res = print_analysis(logs, window_size=50, threshold=5e-7)
 
 
 if 1:
     print('~~~~~~~~~~~~~~~~~~~~~ Gate necessity ~~~~~~~~~~~~~~~~~~~~~~~')
-    adding_path = '../logs/gate_study_t250_2/' + 'test_res.pkl'
+    adding_path = '../../complex_RNN/logs/gate_study_t250_2/' + 'test_res.pkl'
     adding_exps = pickle.load(open(adding_path, 'rb'))
     adding_data_gated = np.array(adding_exps[0])
     adding_data_ungated = np.array(adding_exps[1])
@@ -181,7 +183,7 @@ if 1:
           scistats.mode(adding_data_ungated, axis=0)[0],
           np.var(adding_data_ungated, axis=0),)
 
-    memory_path = '../logs/gate_study_t250_3/' + 'test_res.pkl'
+    memory_path = '../../complex_RNN/logs/gate_study_t250_3/' + 'test_res.pkl'
     memory_exps = pickle.load(open(memory_path, 'rb'))
     memory_data_gated = np.array(memory_exps[0])
     memory_data_ungated = np.array(memory_exps[1])
@@ -200,20 +202,20 @@ if 1:
 if 1:
     # adding
     print('------------------- adding problem logs --------------------')
-    adding_path = '../logs/gate_study_t250_2/'
+    adding_path = '../../complex_RNN/logs/gate_study_t250_2/'
     logs = return_logs(path=adding_path, window_size=50, vtag='mse')
-    adding_res = print_analysis(logs, threshold=0.01)
+    adding_res = print_analysis(logs, window_size=50, threshold=0.01)
 
     # memory
     print('------------------- memory problem logs -------------------')
-    memory_path = '../logs/gate_study_t250_3/'
+    memory_path = '../../complex_RNN/logs/gate_study_t250_3/'
     logs = return_logs(path=memory_path, window_size=50, vtag='cross_entropy')
-    mem_res = print_analysis(logs, threshold=5e-7)
+    mem_res = print_analysis(logs, window_size=50, threshold=5e-7)
 
 if 1:
     print('~~~~~~~~~~~~~~~~~~~~~~~ Real double ~~~~~~~~~~~~~~~~~~~~~~~~')
 
-    adding_path = '../logs/add_gate_study_t250_mod_sig_beta_real/' \
+    adding_path = '../../complex_RNN/logs/add_gate_study_t250_mod_sig_beta_real/' \
                   + 'test_res.pkl'
     adding_exps = pickle.load(open(adding_path, 'rb'))
     adding_data = np.array(adding_exps[0])
@@ -223,7 +225,7 @@ if 1:
     print('real_beta', mean_train)
 
     # memory gate variation study.
-    memory_path = '../logs/mem_gate_study_t250_mod_sig_beta_real/' \
+    memory_path = '../../complex_RNN/logs/mem_gate_study_t250_mod_sig_beta_real/' \
                   + 'test_res.pkl'
     memory_exps = pickle.load(open(memory_path, 'rb'))
     memory_data = np.array(memory_exps[0])
@@ -237,12 +239,12 @@ if 1:
 if 1:
     # adding
     print('------------------- adding problem logs --------------------')
-    adding_path = '../logs/add_gate_study_t250_mod_sig_beta_real/'
+    adding_path = '../../complex_RNN/logs/add_gate_study_t250_mod_sig_beta_real/'
     logs = return_logs(path=adding_path, window_size=50, vtag='mse')
-    adding_res = print_analysis(logs, threshold=0.01)
+    adding_res = print_analysis(logs, window_size=50, threshold=0.01)
 
     # memory
     print('------------------- memory problem logs -------------------')
-    memory_path = '../logs/mem_gate_study_t250_mod_sig_beta_real/'
+    memory_path = '../../complex_RNN/logs/mem_gate_study_t250_mod_sig_beta_real/'
     logs = return_logs(path=memory_path, window_size=50, vtag='cross_entropy')
-    mem_res = print_analysis(logs, threshold=5e-7)
+    mem_res = print_analysis(logs, window_size=50, threshold=5e-7)

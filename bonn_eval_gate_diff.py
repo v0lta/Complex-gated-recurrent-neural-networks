@@ -1,7 +1,5 @@
-# pylint: disable=E722
+# This file runs the experiments shown in section 5.3 of the paper.
 
-# Recreation of the Montreal adding problem experiments from Arjovski et al.
-# Working with Tensorflow 1.3
 import pickle
 import tensorflow as tf
 import argparse
@@ -54,11 +52,11 @@ if __name__ == "__main__":
     decay = 0.9
     batch_size = 50
     GPU = 0
-    memory = True
-    adding = False
+    memory = False
+    adding = True
     activation = mod_relu
     cell_fun = cc.StiefelGatedRecurrentUnit
-    subfolder = 'gate_variation_study_test_bk_2'
+    subfolder = 'gate_variation_study_test_bk_2_add'
     gpu_mem_frac = 1.0
     qr_steps = -1
     stiefel = True
