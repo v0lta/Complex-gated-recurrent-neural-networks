@@ -20,8 +20,21 @@ class RMSpropNatGrad(tf.train.Optimizer):
                  epsilon=1e-10, global_step=None, nat_grad_normalization=False,
                  qr_steps=-1, name='RMSpropNatGrad'):
         """
-            TODO: Do documentation.
-            TODO: Implement unitary momentum.
+            Create an RMSProp Stiefel-manifold hybrid optimizer.
+            learning_rate: Stes the global learning rate for all updates.
+            (Please note Wisdom uses seperate learning rates for the RMSProp
+            and Stiefel updates.)
+            decay:  Discounting factor for the history/coming gradient
+            momentum: A scalar tensor.
+            epsilon:  Small value to avoid zero denominator.
+            global_step: The global step, used to decide when to run
+                         the qr re-normalization.
+            nat_grad_normalization: If True, the Stiefel gradient will be
+                                    normalized as well.
+            qr_steps: When to run the qr re-normalization. -1 means never.
+            (Setting this value leads to a Stiefel manifold, projected
+            gradient descent hybrid approach. Not used in the paper.)
+            name: The name for your optimizer.
         """
         if global_step is not None:
             self._global_step_tensor = global_step
@@ -92,8 +105,6 @@ class RMSpropNatGrad(tf.train.Optimizer):
 
     def re_unitarize(self, W):
         # TODO: check this.
-        # _, U, V = tf.svd(W, full_matrices=True, compute_uv=True)
-        # W = tf.matmul(U, tf.transpose(tf.conj(V)))
         W, _ = tf.qr(W)
         W = tf.Print(W, [tf.constant(0)], 'step with qr.')
         return W

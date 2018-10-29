@@ -9,6 +9,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import random_uniform_initializer as urnd_init
 from custom_regularizers import complex_dropout
+from IPython.core.debugger import Tracer
+debug_here = Tracer()
 
 _URNNStateTuple = collections.namedtuple("URNNStateTuple", ("o", "h"))
 
@@ -493,8 +495,19 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias=True,
                      bias_init=0.0, orthogonal=False):
     """
     Compute Ax + b.
-    Input: x
-    Returns: Ax + b
+    Arguments:
+        x: A real (!) input vector.
+        num_proj: The desired dimension of the output.
+        scope: This string under which the variables will be
+               registered.
+        reuse: If this bool is True, the variables will be reused.
+        bias: If True a bias will be added.
+        bias_init: How to initialize the bias, defaults to zero.
+        orthogonal: If true A will be initialized orthogonally
+                    and kept orthogonal (make sure to use the
+                    Stiefel optimizer if orthogonality is desired).
+    Returns:
+        Ax + b: A vector of size [batch_size, num_proj]
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope(scope, reuse=reuse):
@@ -517,12 +530,31 @@ def matmul_plus_bias(x, num_proj, scope, reuse, bias=True,
 
 
 def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
-                   bias_init_c=0.0, unitary=False, orthogonal=False,
+                   bias_init_i=0.0, unitary=False, split_orthogonal=False,
                    unitary_init=arjovski_init):
     """
     Compute Ax + b.
-    Input: x
-    Returns: Ax + b
+    Arguments:
+        x: A complex input vector.
+        num_proj: The desired dimension of the output.
+        scope: This string under which the variables will be
+               registered.
+        reuse: If this bool is True, the variables will be reused.
+        bias: If True a bias will be added.
+        bias_init_r: How to initialize the real part of the bias, defaults to zero.
+        bias_init_i: How to initialize the imaginary part of the bias, defaults to zero.
+        split_orthogonal: If true A's real and imaginary parts will be
+                    initialized orthogonally and kept orthogonal (make sure to use the
+                    Stiefel optimizer if orthogonality is desired).
+        unitary: If true A will be initialized and kept in a unitary state
+                 (make sure to use the Stiefel optimizer)
+        unitary_init: The initialization method for the unitary matrix.
+    Returns:
+        Ax + b: A vector of size [batch_size, num_proj]
+
+    WARNING:
+    If simply setting split_orthogonal or unitary to True is not enough.
+    Use the Stiefel optimizer as well to enforce orthogonality/unitarity.
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
     with tf.variable_scope(scope, reuse=reuse):
@@ -533,7 +565,7 @@ def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
                                        dtype=tf.float32,
                                        initializer=unitary_init)
                 A = tf.complex(varU[:, :, 0], varU[:, :, 1])
-        elif orthogonal:
+        elif split_orthogonal:
             with tf.variable_scope('orthogonal_stiefel', reuse=reuse):
                 Ar = tf.get_variable('gate_Ur', in_shape[-1:] + [num_proj],
                                      dtype=tf.float32,
@@ -552,16 +584,27 @@ def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
             varbr = tf.get_variable('bias_r', [num_proj], dtype=tf.float32,
                                     initializer=tf.constant_initializer(bias_init_r))
             varbc = tf.get_variable('bias_c', [num_proj], dtype=tf.float32,
-                                    initializer=tf.constant_initializer(bias_init_c))
+                                    initializer=tf.constant_initializer(bias_init_i))
             b = tf.complex(varbr, varbc)
+            debug_here()
             return tf.matmul(x, A) + b
         else:
+            debug_here()
             return tf.matmul(x, A)
 
 
 def C_to_R(h, num_proj, reuse, scope=None, bias_init=0.0):
     '''
-    Linear mapping from C to R.
+    Linear mapping from the complex numbers to the reals.
+    See Arjovski https://arxiv.org/pdf/1511.06464.pdf (eq. 9)
+    for reference.
+
+    Arguments:
+        h: The hidden input representation.
+        num_proj: The desired dimension of the real output.
+        reuse: If True variables will be reused.
+    Returns:
+        A real output vector [batch_size, num_proj]
     '''
     with tf.variable_scope(scope or "C_to_R"):
         concat = tf.concat([tf.real(h), tf.imag(h)], axis=-1)
@@ -570,10 +613,14 @@ def C_to_R(h, num_proj, reuse, scope=None, bias_init=0.0):
 
 class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     """
-    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
+    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al
+    https://arxiv.org/pdf/1511.06464.pdf
     """
     def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None,
                  real=False):
+        """
+        
+        """
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation

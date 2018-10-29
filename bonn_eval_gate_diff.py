@@ -30,9 +30,8 @@ from custom_cells import single_sigmoid_imag
 
 
 from synthetic_experiments import main
-from IPython.core.debugger import Tracer
-
-debug_here = Tracer()
+# from IPython.core.debugger import Tracer
+# debug_here = Tracer()
 
 if __name__ == "__main__":
 

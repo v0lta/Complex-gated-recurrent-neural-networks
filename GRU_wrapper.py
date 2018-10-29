@@ -1,3 +1,8 @@
+"""
+Tensorflow's out of the Box GRU, does not allow state projection,
+this wrapper adds this.
+"""
+
 import tensorflow as tf
 from tensorflow.contrib.rnn import LSTMStateTuple
 from tensorflow.contrib.rnn.python.ops.core_rnn_cell import RNNCell
@@ -20,8 +25,8 @@ class RealGRUWrapper(RNNCell):
 
         self._cell = cell
 
-        print( 'output_size = {0}'.format(output_size))
-        print( ' state_size = {0}'.format(self._cell.state_size))
+        print('output_size = {0}'.format(output_size))
+        print(' state_size = {0}'.format(self._cell.state_size))
 
         # Tuple if multi-rnn
         if isinstance(self._cell.state_size, tuple):
@@ -37,12 +42,11 @@ class RealGRUWrapper(RNNCell):
             # Fine if not multi-rnn
             insize = self._cell.state_size
 
-        self.w_out = tf.get_variable("proj_w_out",
-            [insize, output_size],
-            dtype=tf.float32,
+        self.w_out = tf.get_variable(
+            "proj_w_out", [insize, output_size], dtype=tf.float32,
             initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04))
-        self.b_out = tf.get_variable("proj_b_out", [output_size],
-            dtype=tf.float32,
+        self.b_out = tf.get_variable(
+            "proj_b_out", [output_size], dtype=tf.float32,
             initializer=tf.random_uniform_initializer(minval=-0.04, maxval=0.04))
 
         self.linear_output_size = output_size

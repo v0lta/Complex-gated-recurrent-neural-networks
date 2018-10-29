@@ -1,6 +1,4 @@
-# pylint: disable=E722
-
-# Recreation of the Montreal adding problem experiments from Arjovski et al.
+# Recreation of the Montreal adding and memory problem experiments from Arjovski et al.
 import tensorflow as tf
 import argparse
 import custom_cells as cc
@@ -33,7 +31,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run the montreal implementation \
          of the hochreiter RNN evaluation metrics.")
-    parser.add_argument("--model", default='EUNN',
+    parser.add_argument("--model", default='uRNN',
                         help='Model name: LSTM, GRU, uRNN, sGRU')
     parser.add_argument('--time_steps', '-time_steps', type=int, default=250,
                         help='problem length in time')
@@ -135,7 +133,7 @@ if __name__ == "__main__":
 
     if act_loop and prob_loop and time_loop:
         # for time_it in [100, 250, 500, 1000]:
-        for time_it in [250, 500]:
+        for time_it in [250]:
             for problem in ['adding', 'memory']:
                 if problem == 'adding':
                     adding_bool = True
