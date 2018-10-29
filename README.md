@@ -15,8 +15,8 @@ https://github.com/amarshah/complex_RNN
 and https://github.com/stwisdom/urnn
 
 The custom optimizers class contains the Stiefel-Manifold optimizer proposed 
-by Wisdom et al. (https://arxiv.org/abs/1611.00035), in order to work with
-the basis proposed by Arjovski and Shah (https://arxiv.org/abs/1511.06464)
+by Wisdom et al. (https://arxiv.org/abs/1611.00035) this is the default.
+In order to work with the basis proposed by Arjovski and Shah (https://arxiv.org/abs/1511.06464)
 you can set arjovski_basis=True, for the complex cells implemented in custom_cells.py. 
 
 You dont have to work in the complex domain. To create real valued cells simply
@@ -38,7 +38,7 @@ If you find the code in this repository useful please consider citing:
                is a hybrid cell combining complex-valued and norm-preserving state transitions
                with a gating mechanism. The resulting RNN exhibits excellent stability and
                convergence properties and performs competitively on the synthetic memory and
-                adding task, as well as on the real-world tasks of human motion prediction.}
+               adding task, as well as on the real-world tasks of human motion prediction.}
 }
 ```
 
