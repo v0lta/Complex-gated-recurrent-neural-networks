@@ -1,7 +1,7 @@
-# pylint: disable=E722
+# helper module used in the synthetic evaluation experiments,
+# montreal_eval, bonn_eval and bonn_eval_gate_diff
 
 # Recreation of the Montreal adding problem experiments from Arjovski et al.
-# Working with Tensorflow 1.3
 import os
 import time
 import numpy as np

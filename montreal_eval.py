@@ -1,7 +1,6 @@
 # pylint: disable=E722
 
 # Recreation of the Montreal adding problem experiments from Arjovski et al.
-# Working with Tensorflow 1.3
 import tensorflow as tf
 import argparse
 import custom_cells as cc

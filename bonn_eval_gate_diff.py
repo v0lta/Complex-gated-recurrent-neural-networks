@@ -57,12 +57,9 @@ if __name__ == "__main__":
     real = False
     grad_clip = True
 
-    # TODO remove!!
-    # n_train = int(1e3)
-
     # Research hypothesis 2. Which complex gating function performs best?
     # Run the gated case.
-    gate_act_lst = ['single_gate', gate_phase_hirose, mod_sigmoid_prod, mod_sigmoid_sum,
+    gate_act_lst = [gate_phase_hirose, mod_sigmoid_prod, mod_sigmoid_sum,
                     mod_sigmoid, mod_sigmoid_beta, mod_sigmoid_gamma]
     experiments = []
     for gate_act in gate_act_lst:
