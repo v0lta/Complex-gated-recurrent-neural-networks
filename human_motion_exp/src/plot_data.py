@@ -5,7 +5,6 @@ import tensorflow as tf
 tf.enable_eager_execution()
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-
 from forward_kinematics import _some_variables, fkl, revert_coordinate_space
 
 from IPython.core.debugger import Tracer; debug_here = Tracer()

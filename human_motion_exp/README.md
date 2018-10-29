@@ -1,4 +1,7 @@
 Modified version of the code at https://github.com/una-dinosauria/human-motion-prediction.git
-to re-run our exerpiment execute:
-python src/translate.py --action walking --seq_length_out 25 --iterations 20000
-ipython ./src/translate.py -- --fft True --GPU 4 --cgru True --fft True --seq_length_in 61 --seq_length_out 60 --window_size 30 --step_size 5
+for instructions on how to get started please take a look at the original readme.
+
+The recreate the experiments in our paper please run:
+ipython src/translate.py -- --learning_rate 0.005 --omit_one_hot False --residual_velocities True --cgru False --size 1024
+and 
+ipython src/translate.py -- --learning_rate 0.005 --omit_one_hot False --residual_velocities True --cgru True --size 1024

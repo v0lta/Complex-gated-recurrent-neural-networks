@@ -7,7 +7,7 @@ do the evaluation for you.
 In order to re-run the human-motion prediction and music transcription experiments in the 
 paper take a look at the human_motion_exp and music_exp directories.
 
-Use the montreal_eval.py file to recreate our experiments on the memory and adding problem, shown
+Use the montreal_eval.py file to recreate our experiments on the memory and adding problem shown
 in figures 2 and 3 of the paper.
 
 This repository contains tensorflow ports of the Theano code at:
