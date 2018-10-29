@@ -25,7 +25,7 @@ activation such as the relu. The Stiefel manifold optimizer will also work in th
 real domain.
 
 If you find the code in this repository useful please consider citing:
-' 
+```
 @inproceedings{wolter-2018-nips,
      author = {Wolter, Moritz and Yao, Angela},
       title = {Complex Gated Recurrent Neural Networks},
@@ -38,7 +38,8 @@ If you find the code in this repository useful please consider citing:
                is a hybrid cell combining complex-valued and norm-preserving state transitions
                with a gating mechanism. The resulting RNN exhibits excellent stability and
                convergence properties and performs competitively on the synthetic memory and
-               adding task, as well as on the real-world tasks of human motion prediction.}
-}'
+                adding task, as well as on the real-world tasks of human motion prediction.}
+}
+```
 
 
