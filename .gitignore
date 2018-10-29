@@ -1,14 +1,14 @@
 ## log directories.
 logs/
 WMT/
-human-motion-exp/experiments/
-human-motion-exp/experiments_window_td_fix/
-human-motion-exp/experiments_window
-human-motion-exp/experiments_pre_window/
-human-motion-exp/experiments_old/
-human-motion-exp/experiments_rebuttal/
-human-motion-exp/data/
-human-motion-exp/samples.h5
+human_motion_exp/experiments/
+human_motion_exp/experiments_window_td_fix/
+human_motion_exp/experiments_window
+human_motion_exp/experiments_pre_window/
+human_motion_exp/experiments_old/
+human_motion_exp/experiments_rebuttal/
+human_motion_exp/data/
+human_motion_exp/samples.h5
 music_exp/raw_data/
 music_exp/numpy/
 music_exp/logs/
