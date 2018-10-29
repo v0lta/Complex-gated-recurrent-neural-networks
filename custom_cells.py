@@ -586,10 +586,8 @@ def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
             varbc = tf.get_variable('bias_c', [num_proj], dtype=tf.float32,
                                     initializer=tf.constant_initializer(bias_init_i))
             b = tf.complex(varbr, varbc)
-            debug_here()
             return tf.matmul(x, A) + b
         else:
-            debug_here()
             return tf.matmul(x, A)
 
 
@@ -613,19 +611,31 @@ def C_to_R(h, num_proj, reuse, scope=None, bias_init=0.0):
 
 class UnitaryCell(tf.nn.rnn_cell.RNNCell):
     """
-    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al
+    Tensorflow implementation of unitary evolution RNN as proposed by Arjosky et al.
     https://arxiv.org/pdf/1511.06464.pdf
+    and extended by Wisdom et al. https://arxiv.org/abs/1611.00035
     """
     def __init__(self, num_units, activation=mod_relu, num_proj=None, reuse=None,
-                 real=False):
+                 real=False, arjovski_basis=False):
         """
-        
+        Create a unitary gate-free RNN cell.
+        Arguments:
+            num_units: Cell size
+            activation: The non-linear activation function.
+            num_proj: Desired dimension of the cell output.
+            reuse: If true the cell's variables will be reused.
+            real: If true the cell expects a real-valued input.
+                  Please note that you will also have to use
+                  a real activation function, i.e. the Relu.
+            arjovski_basis: If True, work with the unitary
+                            matrix parametrization
+                            of Arjovski et al.
         """
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
         self._output_size = num_proj
-        self._arjovski_basis = False
+        self._arjovski_basis = arjovski_basis
         self._real = real
 
     def to_string(self):
@@ -702,9 +712,6 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
             cin = tf.complex(inputs, tf.zeros_like(inputs))
             Vx = complex_matmul(cin, self._num_units, 'Vx', self._reuse, bias=True)
 
-        # By FFT.
-        # TODO.
-
         zt = Uh + Vx
         ht = self._activation(zt, '', self._reuse)
 
@@ -731,34 +738,36 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
                  num_proj=None, reuse=None, stiefel=True,
                  real=False, real_double=False,
                  complex_input=False, dropout=False,
-                 single_gate=False):
+                 single_gate=False, arjovski_basis=False):
         """
-        Params:
+        Arguments:
             num_units: The size of the hidden state.
             activation: State to state non-linearity.
             gate_activation: The gating non-linearity.
             num_proj: Output dimension.
             reuse: Reuse graph weights in existing scope.
             stiefel: If True the cell will be used using the Stiefel
-                     optimization scheme from wisdom et al.
+                     optimization scheme from Wisdom et al.
             real: If true a real valued cell will be created.
-            real_double: Use a doulbe real gate similar to to
-                         the complex version.
+            real_double: Use a double real gate similar to to
+                         the complex version (for comparison only).
+            complex_input: If true the cell expects a complex input.
+            arjovski_basis: If true Arjovski et al.'s parameterization
+                            is used for the state transition matrix.
         """
         super().__init__(_reuse=reuse)
         self._num_units = num_units
         self._activation = activation
         # self._state_to_state_act = linear
         self._output_size = num_proj
-        self._arjovski_basis = False
-        self._input_fourier = False
-        self._input_hilbert = False
-        self._input_split_matmul = False
+        self._arjovski_basis = arjovski_basis
+        self._input_hilbert = False  # We did not end up using this in the paper.
+        self._input_split_matmul = False  # We did not end up using this in the paper.
         self._stiefel = stiefel
         self._gate_activation = gate_activation
         self._single_gate = single_gate
         self._real = real
-        self._real_double = False
+        self._real_double = False  # Real "bilinear" double gating for comparison only.
         self._complex_input = complex_input
         self._dropout = dropout
 
@@ -892,10 +901,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
 
             if not self._real:
                 if not self._complex_input:
-                    if self._input_fourier:
-                        cinputs = tf.complex(inputs, tf.zeros_like(inputs))
-                        inputs = tf.fft(cinputs)
-                    elif self._input_hilbert:
+                    if self._input_hilbert:
                         cinputs = tf.complex(inputs, tf.zeros_like(inputs))
                         inputs = hilbert(cinputs)
                     elif self._input_split_matmul:

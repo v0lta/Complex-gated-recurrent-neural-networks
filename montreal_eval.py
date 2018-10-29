@@ -55,7 +55,7 @@ if __name__ == "__main__":
                         help='If true the data will come from the memory problem.')
     parser.add_argument('--adding', '-adding', type=str, default=True,
                         help='If true the data will come from the adding problem.')
-    parser.add_argument('--subfolder', '-subfolder', type=str, default='exp1',
+    parser.add_argument('--subfolder', '-subfolder', type=str, default='test_exp',
                         help='Specify a subfolder to use.')
     parser.add_argument('--non_linearity', '-non_linearity', type=str, default='mod_relu',
                         help='Specify the unitary linearity. Options are linar, mod_relu \
