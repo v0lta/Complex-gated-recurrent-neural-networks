@@ -553,7 +553,7 @@ def complex_matmul(x, num_proj, scope, reuse, bias=False, bias_init_r=0.0,
         Ax + b: A vector of size [batch_size, num_proj]
 
     WARNING:
-    If simply setting split_orthogonal or unitary to True is not enough.
+    Simply setting split_orthogonal or unitary to True is not enough.
     Use the Stiefel optimizer as well to enforce orthogonality/unitarity.
     """
     in_shape = tf.Tensor.get_shape(x).as_list()
