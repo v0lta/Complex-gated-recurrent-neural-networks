@@ -17,14 +17,13 @@ and https://github.com/stwisdom/urnn
 
 The custom optimizers class contains the Stiefel-Manifold optimizer proposed in "Full-Capacity Unitary Recurrent Neural Networks"
 by Wisdom et al. (https://arxiv.org/abs/1611.00035) this is the default.
-In order to work with the basis proposed by Arjovski, Shah et al in "Unitary Evolution Recurrent Neural Networks" (https://arxiv.org/abs/1511.06464) you can set `arjovski_basis=True`, for the complex cells implemented in `custom_cells.py`. 
+You can turn off Stiefel-manifold optimization by setting `stiefel=false` when creating the cell. Please note that you will require a bounded cell activation function such as the Hirose non-linearity for the cell optimization to be stable in this case.
+In order to work with the basis proposed by Arjovski, Shah et al in "Unitary Evolution Recurrent Neural Networks" (https://arxiv.org/abs/1511.06464) you can set `arjovski_basis=True`, for the complex cells implemented in `custom_cells.py`, this setting will work with the default ModRelu-activation.
 
 You don't have to work in the complex domain. To create real valued cells simply
 set the `real` argument in the constructor to `True` and choose a real valued
 activation such as the relu. The Stiefel manifold optimizer will also work in the 
 real domain.
-
-You can turn off Stiefel-manifold optimization by setting `stiefel=false` when creating the cell. Please note that you will require a bounded cell activation function such as the Hirose non-linearity for the cell optimization to be stable in this case.
 
 If you find the code in this repository useful please consider citing:
 ```
