@@ -24,6 +24,8 @@ set the `real` argument in the constructor to `True` and choose a real valued
 activation such as the relu. The Stiefel manifold optimizer will also work in the 
 real domain.
 
+You can turn off Stiefel-manifold optimization by setting 'stiefel=false' when creating the cell. Please note that you will require a bounded cell activation function such as the Hirose non-linearity for the cell optimization to be stable.
+
 If you find the code in this repository useful please consider citing:
 ```
 @inproceedings{wolter-2018-neurips,
