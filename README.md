@@ -1,5 +1,5 @@
 Code for the paper on complex gated recurrent neural networks (https://arxiv.org/pdf/1806.08267v2.pdf).
-This project was developed using python 3.6 and Tensorflow 1.10.0. The project was developed and tested on NVIDIA Titan Xp cards, but does not require 12GB of card memory to run.
+This project was developed using python 3.6 and Tensorflow 1.10.0 on NVIDIA Titan Xp cards, but does not require 12GB of card memory to run.
 
 To recreate the results in table 1 run `bonn_eval_gate_diff.py`, once for the adding and one
 more time for the memory problem. Adjust `./eval/eval.py` with the proper log-directories and it will
