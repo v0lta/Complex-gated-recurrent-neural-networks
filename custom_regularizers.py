@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.python.ops.nn_ops import _get_noise_shape
-from IPython.core.debugger import Tracer
-debug_here = Tracer()
+
 
 
 def complex_dropout(x, keep_prob, noise_shape=None, seed=None, name=None):
