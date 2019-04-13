@@ -3,8 +3,6 @@
     tensorflow optimization ops.
 """
 import tensorflow as tf
-from IPython.core.debugger import Tracer
-debug_here = Tracer()
 from tensorflow.python.training import training_ops
 
 
