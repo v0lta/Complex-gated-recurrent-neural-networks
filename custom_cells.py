@@ -722,8 +722,6 @@ class UnitaryCell(tf.nn.rnn_cell.RNNCell):
         else:
             output = matmul_plus_bias(ht, self._output_size, 'final', self._reuse, 0.0)
 
-        # By fft.
-        # TODO.
         newstate = URNNStateTuple(output, ht)
         return output, newstate
 
