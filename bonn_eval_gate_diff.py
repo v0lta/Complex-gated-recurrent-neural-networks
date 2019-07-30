@@ -24,7 +24,7 @@ from custom_cells import mod_sigmoid_sum
 from custom_cells import mod_sigmoid
 from custom_cells import mod_sigmoid_beta
 from custom_cells import mod_sigmoid_gamma
-from custom_cells import double_sigmoid
+# from custom_cells import double_sigmoid
 from custom_cells import single_sigmoid_real
 from custom_cells import single_sigmoid_imag
 

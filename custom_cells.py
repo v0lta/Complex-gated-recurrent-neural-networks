@@ -772,9 +772,7 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
     def to_string(self):
         cell_str = 'StiefelGatedRecurrentUnit' + '_' \
             + '_' + 'activation' + '_' + str(self._activation.__name__) + '_'
-        if self._input_fourier:
-            cell_str += '_input_fourier_'
-        elif self._input_hilbert:
+        if self._input_hilbert:
             cell_str += '_input_hilbert_'
         elif self._input_split_matmul:
             cell_str += '__input_split_matmul_'
@@ -855,13 +853,13 @@ class StiefelGatedRecurrentUnit(tf.nn.rnn_cell.RNNCell):
             else:
                 ghr = complex_matmul(h, self._num_units, scope='ghr', reuse=self._reuse)
                 gxr = complex_matmul(x, self._num_units, scope='gxr', reuse=self._reuse,
-                                     bias=True, bias_init_c=bias_init,
+                                     bias=True, bias_init_i=bias_init,
                                      bias_init_r=bias_init)
                 gr = ghr + gxr
                 r = self._gate_activation(gr, 'r', self._reuse)
                 ghz = complex_matmul(h, self._num_units, scope='ghz', reuse=self._reuse)
                 gxz = complex_matmul(x, self._num_units, scope='gxz', reuse=self._reuse,
-                                     bias=True, bias_init_c=bias_init,
+                                     bias=True, bias_init_i=bias_init,
                                      bias_init_r=bias_init)
                 gz = ghz + gxz
                 z = self._gate_activation(gz, 'z', self._reuse)
