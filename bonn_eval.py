@@ -54,9 +54,6 @@ if __name__ == "__main__":
     real = True
     grad_clip = True
 
-    # TODO remove!!
-    # n_train = int(4e5)
-
     # Research hypothesis 1. Are gates helpling on the adding problem?
     # Run the gated case.
     experiments_gated = []
