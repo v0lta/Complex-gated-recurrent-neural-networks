@@ -27,7 +27,7 @@ real domain.
 
 If you find the code in this repository useful please consider citing:
 ```
-@inproceedings{wolter-2018-neurips,
+@inproceedings{wolter2018complex,
      author = {Wolter, Moritz and Yao, Angela},
       title = {Complex Gated Recurrent Neural Networks},
   booktitle = {Advances in Neural Information Processing Systems 31},
