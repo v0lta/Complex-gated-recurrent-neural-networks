@@ -51,12 +51,12 @@ class RMSpropNatGrad(tf.train.Optimizer):
 
     def _create_slots(self, var_list):
         """ Set up rmsprop slots for all variables."""
+        init_eps = tf.constant_initializer(self._epsilon)
         for v in var_list:
             init_rms = tf.ones_initializer(dtype=v.dtype)
             self._get_or_make_slot_with_initializer(v, init_rms, v.get_shape(),
                                                     v.dtype, "rms", self._name)
             self._zeros_slot(v, "momentum", self._name)
-            init_eps = tf.constant_initializer(self._epsilon)
             self._get_or_make_slot_with_initializer(v, init_eps, v.get_shape(),
                                                     v.dtype, "eps", self._name)
 
